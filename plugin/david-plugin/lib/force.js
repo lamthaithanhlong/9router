@@ -224,20 +224,24 @@ export function applyForce(ctx, { log = () => {}, name = "david-plugin" } = {}) 
     log("force: this Harness has no ctx.tools.guard(); the rule is only in the prompt");
   }
 
-  // 2. the system-prompt section, present exactly while the rule is ON
+  // 2. the system-prompt section, present exactly while the rule is ON. The service lives on the context that
+  // ctx.inject() hands to its callback, not on this plugin's own ctx, so it is taken from there.
   let section;
+  let prompts = typeof ctx.inject === "function" ? null : ctx; // no ctx.inject (a bare test ctx): the services are on ctx
   const sync = () => {
     const on = isOn();
-    const c = ctx.systemPrompt ? ctx : null;
-    if (on && !section && c?.systemPrompt?.section) {
-      section = c.systemPrompt.section({ name: "david-force", order: 5, text: PROMPT });
+    if (on && !section && prompts?.systemPrompt?.section) {
+      section = prompts.systemPrompt.section({ name: "david-force", order: 5, text: PROMPT });
       if (section === undefined) section = true; // registered, no disposer handed back
+      log("force: system-prompt rule added");
     } else if (!on && section) {
       try { if (typeof section === "function") section(); else section.dispose?.(); } catch { /* already gone */ }
       section = undefined;
+      log("force: system-prompt rule removed");
     }
   };
-  when(["systemPrompt"], () => {
+  when(["systemPrompt"], (c) => {
+    prompts = c;
     sync();
     const timer = setInterval(sync, 1500);
     timer.unref?.();

@@ -196,3 +196,19 @@ test("force steer: a turn of direct work that never called david is sent back on
     assert.equal(steers.length, 1);
   } finally { force.dispose(); setOn(false); }
 });
+
+test("force prompt: the service is taken from the context ctx.inject hands over (it is not on the plugin's own ctx)", () => {
+  const sections = [];
+  const injected = { systemPrompt: { section: (s) => (sections.push(s), () => sections.splice(sections.indexOf(s), 1)) }, agents: { get: () => undefined }, on: () => {} };
+  // the real shape: the plugin's own ctx has no systemPrompt; ctx.inject(deps, fn) calls fn with a context that does
+  const ctx = { tools: { guard: () => () => {} }, inject: (deps, fn) => fn(injected) };
+  setOn(true);
+  const force = applyForce(ctx);
+  try {
+    assert.equal(sections.length, 1, "the rule reached the system prompt");
+    setOn(false); force.sync();
+    assert.equal(sections.length, 0);
+    setOn(true); force.sync();
+    assert.equal(sections.length, 1);
+  } finally { force.dispose(); setOn(false); }
+});
