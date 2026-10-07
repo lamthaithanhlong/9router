@@ -75,35 +75,97 @@ export function decodeFrom(buf, from = 0) {
 const DENIAL_RE = /file access denied|operation not permitted|policy denial|blocked by (the )?sandbox/i;
 const DENIAL_HEAD_CHARS = 120;
 
-// One step line for a session event, or null when the event is noise. Kept deliberately narrow:
-// the feed is for a human watching a run, and 37 tool results per task would drown the three lines
-// that matter. Sandbox refusals are the exception — they are the one "result" that explains a child
-// wandering, so they are surfaced.
-export function summarise(entry, maxChars = 180) {
+// What a session event means for a person watching, as a list of { kind, text, detail }:
+//   nghĩ   the model's reasoning ("what is it checking?")   nói  its visible reply
+//   gọi    a tool call (the command, the file)              kết  what that call returned
+//   retry  the upstream failed and the Harness is retrying  lỗi  a turn that ended in error
+//   duyệt  a request to leave the sandbox, and the answer
+// `text` is one bounded line (maxChars); `detail` is the full content up to detailChars, present only
+// when it says more than the line does, so the dashboard can expand a row on click.
+// One event can yield two items (a message with reasoning AND text), hence a list; [] is noise.
+// `ctx.calls` remembers callId -> tool name so a result can say which call it answers.
+// Sandbox refusals stay the loudest "kết": they explain a child wandering.
+
+function item(kind, full, maxChars, detailChars, lead = "") {
+  const flat = oneLine(full);
+  if (!flat && !lead) return null;
+  const text = truncate(lead + flat, maxChars);
+  const raw = String(full ?? "").trim();
+  const detail = raw && (raw.length > flat.length || text.length < (lead + flat).length || /\n/.test(raw)) ? truncate(raw, detailChars) : undefined;
+  return { kind, text, ...(detail ? { detail } : {}) };
+}
+
+const blocksOf = (d) => {
+  const c = d.message?.content ?? d.content;
+  return Array.isArray(c) ? c : [];
+};
+
+export function summarise(entry, opts = {}, ctx = {}) {
+  const o = typeof opts === "number" ? { maxChars: opts } : opts;
+  const max = o.maxChars ?? 180;
+  const cap = o.detailChars ?? 1200;
   const d = entry?.data ?? {};
+  const out = [];
+  const push = (x) => { if (x) out.push(x); };
+
   if (entry?.type === "assistant/message") {
-    const text = (Array.isArray(d.content) ? d.content : [])
-      .filter((c) => c?.type === "text" && typeof c.text === "string")
-      .map((c) => c.text)
-      .join(" ");
-    const t = oneLine(text);
-    return t ? truncate(t, maxChars) : null;
+    const blocks = blocksOf(d);
+    const join = (types, key) => blocks.filter((c) => types.includes(c?.type)).map((c) => c[key] ?? c.text ?? "").filter((t) => typeof t === "string" && t.trim()).join("\n");
+    push(item("nghĩ", join(["reasoning", "thinking"], "text"), max, cap));
+    push(item("nói", join(["text"], "text"), max, cap));
+    return out;
   }
   if (entry?.type === "tool/call") {
     const name = d.name || d.tool || "tool";
-    const args = typeof d.arguments === "string" ? d.arguments : JSON.stringify(d.arguments ?? {});
-    return truncate(`${name} ${oneLine(args)}`, maxChars);
+    const raw = typeof d.arguments === "string" ? d.arguments : JSON.stringify(d.arguments ?? {});
+    ctx.calls?.set(d.callId, name);
+    let pretty = raw;
+    try {
+      const a = JSON.parse(raw);
+      pretty = typeof a?.command === "string" ? `$ ${a.command}` : JSON.stringify(a, null, 1);
+    } catch { /* not JSON: show it as sent */ }
+    const line = truncate(`${name} ${oneLine(raw)}`, max);
+    out.push({ kind: "gọi", text: line, ...(pretty !== line ? { detail: truncate(pretty, cap) } : {}) });
+    return out;
   }
   if (entry?.type === "tool/result") {
     const content = d.message?.content ?? d.content;
-    const text = oneLine(Array.isArray(content) ? content.filter((c) => c?.type === "text").map((c) => c.text).join(" ") : content);
-    // A real denial is the whole message, so the phrase sits in the first few dozen characters
-    // (measured: 17-65). A file dump that merely mentions the phrase (this very file's regex) hits at
-    // 5000+ and opens with <path>, so only the head is tested and dumps are skipped.
-    const head = text.slice(0, DENIAL_HEAD_CHARS);
-    return !/^<path>/.test(text) && DENIAL_RE.test(head) ? truncate(`⚠ ${text}`, maxChars) : null;
+    const raw = (Array.isArray(content) ? content.filter((c) => c?.type === "text").map((c) => c.text).join("\n") : String(content ?? "")).trim();
+    const flat = oneLine(raw);
+    const name = ctx.calls?.get(d.message?.toolCallId ?? d.message?.source?.callId ?? d.toolCallId) ?? "tool";
+    if (!/^<path>/.test(raw) && DENIAL_RE.test(flat.slice(0, DENIAL_HEAD_CHARS))) {
+      push(item("kết", raw, max, cap, "⚠ "));
+      return out;
+    }
+    if (o.results === false) return out;
+    const exit = /\[exit code: (-?\d+)\]/.exec(raw);
+    const failed = (exit && exit[1] !== "0") || /^(error|fail|traceback)/i.test(flat);
+    const status = exit ? `exit ${exit[1]}` : failed ? "lỗi" : "ok";
+    const file = /^<path>(.*?)<\/path>/.exec(raw);
+    const head = file ? `${file[1]} · ${raw.split("\n").length} dòng` : flat;
+    const x = item("kết", raw, max, cap, `${name} ${status}${head ? ": " : ""}`);
+    if (x) { x.text = truncate(`${name} ${status}${head ? ": " + head : ""}`, max); if (!x.detail && raw.length > 0 && raw.length > x.text.length) x.detail = truncate(raw, cap); out.push(x); }
+    return out;
   }
-  return null;
+  if (entry?.type === "llm/retry") {
+    const f = d.failure ?? {};
+    push(item("retry", f.message ?? "", max, cap, `retry ${d.retry ?? "?"}/${d.maxRetries ?? "?"} ${f.code ? f.code + ": " : ""}`));
+    return out;
+  }
+  if (entry?.type === "turn/end" && d.reason?.kind === "error") {
+    const e = d.reason.error ?? {};
+    push(item("lỗi", e.message ?? "", max, cap, `turn ${d.turn ?? "?"} ${e.code ? e.code + ": " : ""}`));
+    return out;
+  }
+  if (entry?.type === "approval/asked") {
+    push(item("duyệt", d.reason ?? "", max, cap, `xin quyền ${d.toolName ?? ""}: `));
+    return out;
+  }
+  if (entry?.type === "approval/decided") {
+    push(item("duyệt", d.outcome ?? "", max, cap, "quyền: "));
+    return out;
+  }
+  return out;
 }
 
 // A child session lives under a project directory named after the parent's cwd, which this module
@@ -133,6 +195,8 @@ export function createProgress(cfg = {}, { log = () => {} } = {}) {
     pollMs: 1000,
     heartbeatMs: 30_000,
     maxLineChars: 180,
+    detailChars: 1200,
+    results: true,
     sessionsDir: "~/.dsh/sessions",
     ...cfg,
   };
@@ -140,11 +204,12 @@ export function createProgress(cfg = {}, { log = () => {} } = {}) {
 
   function watch({ sessionId, label = "child", role, route, runId, write, startedAt = Date.now() }) {
     if (opts.enabled === false || !sessionId || typeof write !== "function") return { stop() {}, tick() {} };
-    const state = { file: null, offset: 0, lastEmitAt: Date.now(), stopped: false, missing: 0 };
-    const emit = (text) => {
+    const state = { file: null, offset: 0, lastEmitAt: Date.now(), stopped: false, missing: 0, calls: new Map() };
+    const emit = (x) => {
+      const { text, kind, detail } = typeof x === "string" ? { text: x } : x;
       state.lastEmitAt = Date.now();
       try {
-        write(text, { role, label, route, run: runId, child: true });
+        write(text, { role, label, route, run: runId, child: true, ...(kind ? { kind } : {}), ...(detail ? { detail } : {}) });
       } catch (err) {
         log(`progress: ${label} write failed: ${err.message || err}`);
       }
@@ -170,14 +235,13 @@ export function createProgress(cfg = {}, { log = () => {} } = {}) {
             } catch {
               continue; // a half-written line is the next poll's problem
             }
-            const summary = summarise(entry, opts.maxLineChars);
-            if (summary) emit(summary);
+            for (const x of summarise(entry, { maxChars: opts.maxLineChars, detailChars: opts.detailChars, results: opts.results }, state)) emit(x);
           }
         }
         // Silence is the thing the owner complained about, so a quiet child still gets a line.
         if (now - state.lastEmitAt >= opts.heartbeatMs) {
           const secs = Math.round((now - startedAt) / 1000);
-          emit(state.file ? `${label} vẫn chạy ${secs}s…` : `${label} vẫn chạy ${secs}s… (chưa thấy session log)`);
+          emit({ kind: "nhịp", text: state.file ? `${label} vẫn chạy ${secs}s…` : `${label} vẫn chạy ${secs}s… (chưa thấy session log)` });
         }
       } catch (err) {
         log(`progress: ${label} watch failed: ${err.message || err}`); // never kill a run over the feed

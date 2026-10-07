@@ -13,6 +13,29 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-10-07
+
+### Added
+- **The feed says what a child is doing, not only which tool it called** (`lib/progress.js`, dashboard).
+  Every line now carries a `kind`: `nghĩ` (the model's reasoning), `nói` (its reply), `gọi` (a tool call),
+  `kết` (what that call returned: `bash exit 1: ...`, `read ok: path · N dòng`), `retry` (the upstream failed
+  and the Harness is retrying, with the error code), `lỗi` (a turn that ended in error) and `duyệt` (a request
+  to leave the sandbox, and the answer). A line is one bounded row (`progress.maxLineChars`, 180); the full
+  text rides along as `detail` (`progress.detailChars`, 1200), written only when it says more than the row.
+  `progress.results: false` drops the `kết` lines (a sandbox refusal is still shown).
+- **Dashboard session log**: a coloured label per kind, click a row to open its detail (the full thought, the
+  command as `$ ...`, the output), a `chi tiết` chip to open every row, and a chip per kind to filter. The log
+  only follows the bottom when you are already there, so opening a row no longer jumps the view away.
+
+### Fixed
+- **A child's replies and thoughts never reached the feed.** `summarise()` read `data.content`, but the real
+  session event keeps it at `data.message.content`, so only tool calls were ever shown. Both shapes are read now.
+- **A child's own words could flip a stage card.** `stagesOf` inferred done/failed from "done in" / "failed in"
+  in any line, so a command output or a thought containing the phrase would finish or fail the card. Lines
+  written by the child (`child: true`) no longer move a stage's status.
+- **A cancelled call left its card "running" forever.** The 0.7.6 line "cancelled after" was not recognised by
+  `stagesOf`; the stage now shows failed.
+
 ## [0.7.6] - 2026-10-07
 
 ### Added

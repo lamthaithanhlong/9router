@@ -205,6 +205,8 @@ export const DEFAULTS = {
     pollMs: 1000,          // how often the child's session file is re-read
     heartbeatMs: 30_000,   // a child that says nothing still gets a "vẫn chạy Ns…" line
     maxLineChars: 180,     // one line per event, so a long message cannot flood the feed
+    detailChars: 1200,     // the full text kept for a row the dashboard expands on click
+    results: true,         // also show what each tool call returned (kết); false = calls and thoughts only
     sessionsDir: "~/.dsh/sessions",
   },
 

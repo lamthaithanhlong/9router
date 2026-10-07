@@ -55,6 +55,18 @@
   table.log td.w { white-space: nowrap; }
   .r-codex { color: #56d364; } .r-deepseek { color: #a371f7; } .r-cursor { color: #58a6ff; }
   .r-backup { color: #d29922; } .r-laya { color: #e3b341; } .r-manager { color: #e3b341; }
+  .kd { display: inline-block; min-width: 34px; text-align: center; margin-right: 6px; padding: 0 5px; border-radius: 4px;
+        font-size: 9.5px; font-weight: 700; letter-spacing: .3px; vertical-align: 1px; background: #30363d; color: #8b949e; }
+  .kd.k-nghi { background: #2d1f4d; color: #bc8cff; }  .kd.k-noi { background: #12301e; color: #56d364; }
+  .kd.k-goi { background: #0d2a4a; color: #58a6ff; }   .kd.k-ket { background: #3a2a0a; color: #e3b341; }
+  .kd.k-retry { background: #4d3a12; color: #f0883e; } .kd.k-loi { background: #4d1a1a; color: #f85149; }
+  .kd.k-duyet { background: #1d2f3a; color: #79c0ff; }
+  table.log tr.has { cursor: pointer; }
+  table.log tr.has:hover td { background: #1c2128; }
+  table.log tr.has .mk { color: #6e7681; margin-left: 4px; font-size: 9px; }
+  table.log tr.dt td { padding: 0 7px 6px 7px; border-bottom: 1px solid #1c2128; }
+  table.log tr.dt pre { margin: 0; padding: 6px 8px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+        white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; color: #adbac7; font: 10.5px/1.45 ui-monospace, Menlo, monospace; }
   .logwrap { max-height: 420px; overflow: auto; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 9px; border-bottom: 1px solid #2d333b; }
   .chip { font-size: 10.5px; padding: 2px 7px; border-radius: 20px; border: 1px solid #30363d; color: #8b949e;
@@ -176,6 +188,11 @@ const money = (n) => "$" + (Number(n) || 0).toFixed(4);
 let state = null;
 let routes = new Set();
 let onlyRun = false;
+const kinds = new Set();       // kind filter chips (nghĩ / gọi / kết ...)
+const opened = new Set();      // rows the owner clicked open
+let allOpen = false;           // "chi tiết" chip: open every row that has detail (firehose)
+const KIND_CLS = { "nghĩ": "k-nghi", "nói": "k-noi", "gọi": "k-goi", "kết": "k-ket", retry: "k-retry", "lỗi": "k-loi", "duyệt": "k-duyet" };
+const rowKey = (s) => `${s.ts}|${s.label || s.role || ""}|${String(s.text || "").slice(0, 40)}`;
 
 function pill(st) {
   const map = { running: ["run", "● đang chạy"], done: ["ok", "xong"], failed: ["bad", "hỏng"],
@@ -215,20 +232,31 @@ function renderLog() {
   const rows = (state?.steps ?? []).filter((s) => {
     if (onlyRun && state?.run && s.run !== state.run.id) return false;
     if (routes.size && s.route && !routes.has(s.route)) return false;
+    if (kinds.size && !kinds.has(s.kind || "")) return false;
     return true;
   });
-  $("log").querySelector("tbody").innerHTML = rows.slice(-400).map((s) => `
-    <tr><td class="t">${esc(clock(s.ts))}</td>
-        <td class="w ${routeClass(s.route)}">${esc(s.route || s.role || "")}</td>
-        <td>${esc((s.text || "").slice(0, 150))}</td></tr>`).join("");
   const el = document.querySelector(".logwrap");
-  if (el) el.scrollTop = el.scrollHeight;
+  const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  $("log").querySelector("tbody").innerHTML = rows.slice(-400).map((s) => {
+    const k = rowKey(s);
+    const has = !!s.detail;
+    const open = has && (allOpen || opened.has(k));
+    const badge = s.kind ? `<span class="kd ${KIND_CLS[s.kind] || ""}">${esc(s.kind)}</span>` : "";
+    return `<tr class="${has ? "has" : ""}" data-k="${esc(k)}">
+        <td class="t">${esc(clock(s.ts))}</td>
+        <td class="w ${routeClass(s.route)}">${esc(s.label || s.route || s.role || "")}</td>
+        <td>${badge}${esc((s.text || "").slice(0, 190))}${has ? `<span class="mk">${open ? "▾" : "▸"}</span>` : ""}</td></tr>`
+      + (open ? `<tr class="dt"><td></td><td></td><td><pre>${esc(s.detail)}</pre></td></tr>` : "");
+  }).join("");
+  if (el && atBottom) el.scrollTop = el.scrollHeight;
 }
 
 function renderChips() {
   const all = new Set((state?.steps ?? []).map((s) => s.route).filter(Boolean));
   $("chips").innerHTML = [...all].map((r) => `<span class="chip ${routes.has(r) ? "on" : ""}" data-r="${esc(r)}">${esc(r)}</span>`).join("")
-    + `<span class="chip ${onlyRun ? "on" : ""}" data-only="1">chỉ lần này</span>`;
+    + `<span class="chip ${onlyRun ? "on" : ""}" data-only="1">chỉ lần này</span>`
+    + `<span class="chip ${allOpen ? "on" : ""}" data-detail="1" title="mở hết chi tiết (nghĩ / lệnh / kết quả)">chi tiết</span>`
+    + [...new Set((state?.steps ?? []).map((s) => s.kind).filter(Boolean))].map((k) => `<span class="chip ${kinds.has(k) ? "on" : ""}" data-kind="${esc(k)}">${esc(k)}</span>`).join("");
 }
 
 function renderKpi() {
@@ -405,7 +433,7 @@ function flowPulse(s) {
   const old = el.querySelector(".fbub"); if (old) old.remove();
   const b = document.createElement("div");
   b.className = "fbub";
-  b.textContent = String(s.text || "").replace(/\s+/g, " ").slice(0, 70);
+  b.textContent = (s.kind ? s.kind + ": " : "") + String(s.text || "").replace(/\s+/g, " ").slice(0, 70);
   el.appendChild(b);
   setTimeout(() => b.remove(), 3700);
 }
@@ -420,8 +448,18 @@ $("chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
   if (chip.dataset.only) onlyRun = !onlyRun;
+  else if (chip.dataset.detail) allOpen = !allOpen;
+  else if (chip.dataset.kind) { const k = chip.dataset.kind; kinds.has(k) ? kinds.delete(k) : kinds.add(k); }
   else { const r = chip.dataset.r; routes.has(r) ? routes.delete(r) : routes.add(r); }
   renderChips(); renderLog();
+});
+
+$("log").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.has");
+  if (!tr) return;
+  const k = tr.dataset.k;
+  opened.has(k) ? opened.delete(k) : opened.add(k);
+  renderLog();
 });
 
 const es = new EventSource("/events");

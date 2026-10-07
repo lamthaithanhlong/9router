@@ -11,6 +11,20 @@ import { createDashboard, currentRun, stagesOf } from "../../plugin/jev-orchestr
 const T = "2026-10-07T17:29:23.000Z";
 const step = (o) => JSON.stringify({ ts: T, run: "abc", text: "", ...o });
 
+test("stagesOf: a child's own words cannot move a stage, and a cancelled call is failed", () => {
+  const steps = [
+    { ts: T, run: "abc", text: "worker-1 started on deepseek", role: "worker", label: "worker-1", route: "deepseek" },
+    // model text that happens to contain the pipeline's own phrases:
+    { ts: T, run: "abc", text: "grep: tests done in 2s, started on main", role: "worker", label: "worker-1", route: "deepseek", child: true, kind: "kết" },
+    { ts: T, run: "abc", text: "worker-2 started on cursor", role: "worker", label: "worker-2", route: "cursor" },
+    { ts: T, run: "abc", text: "worker-2 cancelled after 30.2s, $0.0000 (worker-2 ended with aborted)", role: "worker", label: "worker-2", route: "cursor", status: "error" },
+  ];
+  const [w1, w2] = stagesOf(steps, "abc");
+  assert.equal(w1.status, "running", "a child line saying 'done in' must not finish the card");
+  assert.equal(w1.text, "grep: tests done in 2s, started on main", "but the card still shows the latest thing it did");
+  assert.equal(w2.status, "failed");
+});
+
 test("stagesOf: groups the feed by label and derives running / done / failed", () => {
   const steps = [
     { ts: T, run: "abc", text: "planner started on codex (via manager)", role: "planner", label: "planner", route: "codex", model: "codex-head", via: "manager", turn: 1 },

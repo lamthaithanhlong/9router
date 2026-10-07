@@ -89,9 +89,12 @@ export function stagesOf(steps, runId) {
     if (s.via) st.via = s.via;
     if (s.turn) st.turn = s.turn;
     const text = s.text ?? "";
+    // A child's own lines (what it thought, what a command printed) are model text: they must not be able to
+    // say "done in" and flip the card. Only the pipeline's own lines move a stage's status.
+    if (s.child) continue;
     if (/started on /.test(text)) { st.status = "running"; st.startedAt = s.ts ?? st.startedAt; }
-    if (/(done|failed) in /.test(text)) {
-      st.status = s.status === "error" || /failed in /.test(text) ? "failed" : "done";
+    if (/(done in |failed in |cancelled after )/.test(text)) {
+      st.status = s.status === "error" || /(failed in |cancelled after )/.test(text) ? "failed" : "done";
       st.endedAt = s.ts ?? st.endedAt;
       if (typeof s.usd === "number") st.usd += s.usd;
     }
