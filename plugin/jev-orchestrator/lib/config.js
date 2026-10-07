@@ -64,10 +64,12 @@ export const DEFAULTS = {
   budgets: {
     codex: { unit: "calls", daily: 40, reserveFraction: 0.2, reserveFor: ["final_reviewer"] },
     deepseek: { unit: "tokens", daily: 300_000, reserveFraction: 0, reserveFor: [] },
-    // Hosted Jev is charged per INPUT token ($0.042/Mtok for Jev 1.13), so a daily
-    // cap of 2M input tokens costs at most ~$0.084/day (~$2.5/month) and stops a
-    // runaway loop long before it matters.
-    laya: { unit: "tokens", daily: 2_000_000, reserveFraction: 0, reserveFor: [] },
+    // The plan that serves this key allows 50 questions per UTC day, so the cap is
+    // counted in CALLS, not tokens: the 51st question is refused and the pipeline
+    // falls back to its rules (and to the free local engine) instead of spending
+    // quota it does not have. Jev itself is cheap ($0.042/Mtok input); the quota,
+    // not the money, is the scarce resource.
+    laya: { unit: "calls", daily: 50, reserveFraction: 0, reserveFor: [] },
     // Placeholder daily cap per external API route so a runaway loop cannot spend without limit.
     // Tune to the real upstream quota in production; the number below is only a safety net.
     api_deepseek: { unit: "tokens", daily: 200_000, reserveFraction: 0, reserveFor: [] },

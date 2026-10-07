@@ -135,7 +135,7 @@ test("pipeline: the Jev call is metered, and the daily cap skips it instead of s
   const deps = {
     cfg: resolveConfig(),
     ledger,
-    laya: { noul: async (id, state, instructions, onUsage) => { asked = true; onUsage?.({ inputTokens: 321 }); return 0.9; } },
+    laya: { noul: async (id, state, instructions, onUsage) => { asked = true; onUsage?.({ inputTokens: 321, source: "cloud" }); return 0.9; } },
     log: () => {}, loadPrompt: (r) => r, trace: [],
     spawn: async () => "ok",
     getChanges: async () => ({ files: [{ path: "src/a.js", added: 1, removed: 0 }], diff: "diff" }),
@@ -144,10 +144,11 @@ test("pipeline: the Jev call is metered, and the daily cap skips it instead of s
   const input = { task: "fix the bug", cwd: "/repo", tasks: ["fix the bug"], research: [], allowedPaths: ["src/**"], testCommand: "true", finalReview: false };
   await runPipeline(deps, input);
   assert.ok(asked, "laya must be asked when under the cap");
-  assert.equal(ledger.used("laya"), 321);
+  assert.equal(ledger.used("laya"), 1, "one hosted question costs one unit, whatever its token count");
+  assert.equal(ledger.remaining("laya"), DEFAULTS.budgets.laya.daily - 1);
 
   // Over the cap: it must not be asked at all.
-  ledger.charge("laya", DEFAULTS.budgets.laya.daily);
+  for (let i = 0; i < DEFAULTS.budgets.laya.daily; i += 1) ledger.charge("laya", 0);
   let askedAgain = false;
   const deps2 = { ...deps, trace: [], laya: { noul: async () => { askedAgain = true; return 0.9; } } };
   await runPipeline(deps2, input);
@@ -155,4 +156,23 @@ test("pipeline: the Jev call is metered, and the daily cap skips it instead of s
   const entry = deps2.trace.find((t) => t.role === "laya");
   assert.equal(entry.status, "skipped");
   assert.match(String(entry.detail), /cap/);
+});
+
+test("pipeline: a local fallback answer does not consume the hosted question quota", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jev-quota-"));
+  const ledger = new Ledger(join(dir, "ledger.json"), DEFAULTS.budgets);
+  const deps = {
+    cfg: resolveConfig(),
+    ledger,
+    laya: { noul: async (id, state, instructions, onUsage) => { onUsage?.({ inputTokens: 53, model: null, source: "local" }); return 0.9; } },
+    log: () => {}, loadPrompt: (r) => r, trace: [],
+    spawn: async () => "ok",
+    getChanges: async () => ({ files: [{ path: "src/a.js", added: 1, removed: 0 }], diff: "diff" }),
+    runTests: async () => ({ passed: true, summary: "", ran: true }),
+  };
+  await runPipeline(deps, { task: "fix the bug", cwd: "/repo", tasks: ["fix the bug"], research: [], allowedPaths: ["src/**"], testCommand: "true", finalReview: false });
+  assert.equal(ledger.used("laya"), 0, "the free local engine must not spend the paid quota");
+  const entry = deps.trace.find((t) => t.role === "laya");
+  assert.equal(entry.source, "local");
+  assert.equal(entry.tokensIn, undefined);
 });

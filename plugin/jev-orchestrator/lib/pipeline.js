@@ -104,13 +104,17 @@ async function askLaya(deps, id, state, instructions) {
     deps.trace.push({ role: "laya", label: id, key: "laya", provider: "laya", model: "systemone", status: "skipped", detail: "daily token cap reached", ms: 0 });
     return null;
   }
-  let tokensIn = 0;
-  const p = await deps.laya.noul(id, state, instructions, (usage) => { tokensIn = usage?.inputTokens ?? 0; });
-  if (tokensIn > 0) deps.ledger?.charge?.("laya", tokensIn);
+  let usage = null;
+  const p = await deps.laya.noul(id, state, instructions, (u) => { usage = u; });
+  // Only the hosted endpoint consumes the daily question quota; the local engine is
+  // free and unlimited, so a fallback answer must not be charged.
+  const charged = usage?.source === "cloud";
+  if (charged) deps.ledger?.charge?.("laya", usage.inputTokens ?? 0);
   deps.trace.push({
     role: "laya", label: id, key: "laya", provider: "laya", model: "systemone",
     status: p === null ? "unavailable" : "ok", detail: p, ms: Date.now() - t0,
-    ...(tokensIn > 0 ? { tokensIn } : {}),
+    ...(charged && Number.isFinite(usage?.inputTokens) ? { tokensIn: usage.inputTokens } : {}),
+    ...(usage?.source ? { source: usage.source } : {}),
   });
   return p;
 }

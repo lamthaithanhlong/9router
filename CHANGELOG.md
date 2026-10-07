@@ -13,6 +13,16 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-07
+
+### Changed
+- **The Jev cap is counted in questions, not tokens.** The plan that serves this key allows **50 questions per
+  UTC day**, and that quota — not the money ($0.042 per million input tokens) — is the scarce resource. With the
+  old 2M-token cap the plugin would have burned a whole day's quota before the ledger noticed. `budgets.laya` is
+  now `{ unit: "calls", daily: 50 }`, checked before the request.
+- **Only a hosted answer is charged.** The free local `laya-serve` fallback no longer consumes quota, and the
+  trace records which source answered (`source: cloud|local`).
+
 ## [0.6.2] - 2026-10-07
 
 ### Added

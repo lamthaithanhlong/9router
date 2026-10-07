@@ -9,14 +9,19 @@ DeepSeek Harness plugin. One tool, `jev_run`, runs a coding task through cost-aw
 | reviewer | deepseek-host/deepseek-v4.1-flash (falls back to Codex) | money | reviews the diff, only when a trigger fires |
 | final_reviewer | router9/codex-head | Codex quota | last check before merge, only for risky diffs |
 | backup (last in every chain) | router9/backup-free (a 9Router combo of free OpenCode/OpenRouter models) | free | runs a role only when the routes before it are out of budget or failing |
-| yes/no decision | Laya, `http://127.0.0.1:8130/v1/systemone` | free, local | does an English task need a plan? (review question exists but is off by default) |
+| yes/no decision | hosted Jev (`https://api.typesafe.ai/v1/systemone`), local `laya-serve` as fallback | 50 questions/day, then free | does an English task need a plan? (review question exists but is off by default) |
 
 ## Rules the code enforces
 
 - The tool has no `model` parameter. A role picks its route from a chain (`lib/config.js`, `chains`), cheapest first. A role whose chain is out of budget is held for a person; it never uses a route outside its chain.
 - The paid review runs only on code-computed triggers: diff over 150 lines, a risky path, a path outside `allowed_paths`, tests red twice. Laya (when its review question is switched on) can add a reason to review; it cannot remove one.
 - Laya is used only for the plan question, only for English tasks, and measured zero-shot it cannot tell risky diffs from trivial ones, so `laya.reviewEnabled` is false until it is fine-tuned (see PLUGIN-TEMPLATE.md §11.5).
-- Laya down means the rules alone decide, and the report says so. When Laya is unreachable the plugin starts it in the background through `~/.local/bin/laya-ctl` (at most once per 5 minutes).
+- The plan question can go to the hosted Jev first (`laya.url`, key from `laya.keyEnv` or the 0600 `laya.keyFile`)
+  and falls back to the free local `laya-serve` (`laya.fallbackUrl`) when no key resolves or the hosted call fails.
+  A cloud URL never starts the local engine; only a loopback URL may. The hosted route is capped at
+  `budgets.laya` questions per UTC day (default 50, the plan's quota) — counted in CALLS, checked before the
+  request — and a local answer costs nothing, so a fallback never spends the quota.
+- Laya down means the rules alone decide, and the report says so. When the local engine is unreachable the plugin starts it in the background through `~/.local/bin/laya-ctl` (at most once per 5 minutes).
 - A role moves to the next route of its chain when a route is out of budget or its child fails; the last route is always `backup`. A failed route is skipped for 10 minutes. A risky diff approved only by backup reviewers still waits for a person (`backupPolicy.reviewIsFinal`).
 - At most 3 children run at once on Cursor (`cursor-workers` and `manager-temp` share that cap) and starts are 2 s apart, across all `jev_run` calls; extra sub-tasks queue, and a call with more than 6 sub-tasks or 3 research questions is refused. Tune with `limits.concurrency`, `limits.startGapMs`, `limits.maxTasks`.
 - Reviewers see the plan and the diff, never the worker's own words. An unreadable verdict counts as "changes".
