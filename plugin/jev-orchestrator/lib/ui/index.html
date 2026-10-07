@@ -67,12 +67,80 @@
   .k .v { font-size: 17px; font-weight: 650; margin-top: 1px; }
   .k .d { color: #6e7681; font-size: 10.5px; }
   .over { color: #f85149 !important; }
+
+  /* ---- FLOW: luồng đầy đủ head → jev gate → planner → researcher → worker → reviewer → final ---- */
+  .flow { position: relative; margin: 0 0 14px; padding: 12px 14px 10px; border: 1px solid #2d333b; border-radius: 12px;
+          background: radial-gradient(1200px 200px at 10% -20%, rgba(110,64,201,.12), transparent), #11151c; overflow-x: auto; }
+  .flow .fh { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 12.5px; margin-bottom: 8px; }
+  .flow .legend { margin-left: auto; display: flex; gap: 10px; font-size: 10px; color: #6e7681; font-weight: 400; }
+  .flow .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .fstage { position: relative; min-width: 920px; }
+  .fcols { position: relative; z-index: 2; display: flex; justify-content: space-between; gap: 26px; align-items: stretch; }
+  .fcol { flex: 1 1 0; min-width: 96px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+  .fcap { text-align: center; font-size: 9px; letter-spacing: .8px; text-transform: uppercase; color: #6e7681; margin-bottom: 2px; }
+  .fmgr { position: relative; z-index: 2; display: flex; justify-content: center; margin-top: 30px; }
+  .fedges { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
+
+  .fn { position: relative; padding: 7px 9px; border-radius: 10px; border: 1px solid #30363d; background: #161b22;
+        transition: border-color .4s, background .4s, opacity .4s, transform .4s; min-width: 0; }
+  .fn .fr { font-size: 8.5px; letter-spacing: .8px; text-transform: uppercase; color: #6e7681; }
+  .fn .fl { font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fn .fm { font: 9.5px ui-monospace, Menlo, monospace; color: #7d8590; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .fn .ft { font: 10px ui-monospace, Menlo, monospace; color: #8b949e; margin-top: 3px; display: flex; justify-content: space-between; gap: 6px; }
+  .fn .fs { position: absolute; top: -7px; right: 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .4px; padding: 1px 6px; border-radius: 10px; background: #30363d; color: #8b949e; }
+  .fn .fb { height: 2px; margin-top: 5px; background: #21262d; border-radius: 2px; overflow: hidden; visibility: hidden; }
+  .fn .fb i { display: block; height: 100%; width: 40%; background: #58a6ff; border-radius: 2px; }
+  .fn.pending { opacity: .42; border-style: dashed; }
+  .fn.skipped { opacity: .3; border-style: dotted; }
+  .fn.running { border-color: #1f6feb; background: #0f1b2e; animation: fpulse 1.6s ease-in-out infinite; transform: scale(1.03); }
+  .fn.running .fb { visibility: visible; }
+  .fn.running .fb i { animation: fslide 1.1s ease-in-out infinite; }
+  .fn.running .fs { background: #1f6feb; color: #fff; }
+  .fn.done { border-color: #2ea043; background: #0e1f16; }
+  .fn.done .fs { background: #1a3f26; color: #56d364; }
+  .fn.failed { border-color: #f85149; background: #261214; animation: fshake .5s 1; }
+  .fn.failed .fs { background: #4d1a1a; color: #f85149; }
+  .fn.hold { border-color: #e3b341; background: #241d0c; }
+  .fn.hold .fs { background: #4d3a12; color: #e3b341; }
+  .fn.kind-head { border-color: #6e40c9; background: #1a1230; }
+  .fn.kind-head .fr { color: #a371f7; }
+  .fn.kind-mgr { border-color: #9e6a03; background: #1f1808; min-width: 260px; text-align: center; }
+  .fn.kind-mgr.running { border-color: #e3b341; background: #2a200a; animation: fpulse-y 1.6s ease-in-out infinite; }
+  .fn.kind-mgr .ft { justify-content: center; gap: 12px; }
+  .fn.burst::after { content: ""; position: absolute; inset: -2px; border-radius: 12px; border: 2px solid #58a6ff; animation: fburst .8s ease-out forwards; pointer-events: none; }
+  .fbub { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; max-width: 230px; width: max-content;
+          padding: 3px 8px; border-radius: 7px; font-size: 10px; background: #1f6feb; color: #fff; pointer-events: none;
+          animation: fbub 3.6s ease-out forwards; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fbub::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -4px; border: 4px solid transparent; border-top-color: #1f6feb; }
+
+  .fedge { fill: none; stroke: #2d333b; stroke-width: 1.5; transition: stroke .4s; }
+  .fedge.done { stroke: #238636; }
+  .fedge.live { stroke: #388bfd; stroke-dasharray: 6 5; animation: fdash .7s linear infinite; }
+  .fedge.mgr { stroke: #9e6a03; stroke-dasharray: 3 5; opacity: .55; }
+  .fedge.mgr.live { stroke: #e3b341; opacity: 1; animation: fdash .9s linear infinite; }
+  .fdot { fill: #79c0ff; filter: drop-shadow(0 0 4px #388bfd); }
+  .fdot.mgr { fill: #f2cc60; filter: drop-shadow(0 0 4px #e3b341); }
+
+  @keyframes fpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(56,139,253,.55); } 50% { box-shadow: 0 0 0 7px rgba(56,139,253,0); } }
+  @keyframes fpulse-y { 0%,100% { box-shadow: 0 0 0 0 rgba(227,179,65,.5); } 50% { box-shadow: 0 0 0 7px rgba(227,179,65,0); } }
+  @keyframes fslide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  @keyframes fdash { to { stroke-dashoffset: -22; } }
+  @keyframes fburst { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.18); } }
+  @keyframes fbub { 0% { opacity: 0; transform: translate(-50%, 6px); } 8% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+  @keyframes fshake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+  @media (prefers-reduced-motion: reduce) { .fn, .fn *, .fedge, .fbub { animation: none !important; } .fdot { display: none; } }
 </style>
 </head>
 <body>
 
 <h1><span>jev</span> · live <span id="dot" class="dot off"></span></h1>
 <div class="sub" id="sub">đang nối…</div>
+
+<div class="flow" id="flow">
+  <div class="fh">FLOW · luồng chạy thật <span class="tag wait" id="flowtag">idle</span>
+    <span class="legend"><span><i style="background:#6e7681"></i>chờ</span><span><i style="background:#1f6feb"></i>đang chạy</span><span><i style="background:#2ea043"></i>xong</span><span><i style="background:#f85149"></i>hỏng</span><span><i style="background:#e3b341"></i>manager</span></span></div>
+  <div class="fstage" id="fstage"><svg class="fedges" id="fedges"></svg><div class="fcols" id="fcols"></div><div class="fmgr" id="fmgr"></div></div>
+</div>
 
 <div class="wrap">
   <div class="cards" id="cards"></div>
@@ -190,8 +258,162 @@ function renderSub() {
   $("logtag").textContent = st === "running" ? "live" : st;
 }
 
+/* ---------- FLOW ---------- */
+const COLS = [
+  { id: "head", cap: "Head agent" }, { id: "laya", cap: "Jev · gate" }, { id: "planner", cap: "Planner" },
+  { id: "researcher", cap: "Researchers ‖" }, { id: "worker", cap: "Workers ‖" },
+  { id: "reviewer", cap: "Reviewer" }, { id: "final_reviewer", cap: "Final review" }, { id: "end", cap: "Kết quả" },
+];
+const SVGNS = "http://www.w3.org/2000/svg";
+let flowSig = "";
+const BUBBLE_T = new Map();
+
+function flowModel() {
+  const run = state?.run;
+  const stages = run?.stages ?? [];
+  const started = stages.length > 0;
+  const runSt = run ? run.status : "idle";
+  const anyWorker = stages.some((s) => s.role === "worker");
+  const ended = run && runSt !== "running";
+  const nodes = [];
+  const add = (col, n) => nodes.push({ col, ...n });
+
+  const headSt = !run ? "pending" : runSt === "running" ? "running" : "done";
+  add("head", { key: "head", role: "head", label: "jev_run", sub: "CEO / CTO", st: headSt, kind: "head" });
+
+  const layaSteps = (state?.steps ?? []).filter((s) => run && s.run === run.id && s.role === "laya" || s.role === "jev");
+  const layaSt = !run ? "pending" : layaSteps.length || started ? "done" : "running";
+  add("laya", { key: "laya", role: "jev", label: "needs_plan", sub: layaSteps.length ? (layaSteps[layaSteps.length - 1].text || "").slice(0, 28) : "cổng quyết định", st: layaSt });
+
+  for (const col of ["planner", "researcher", "worker", "reviewer", "final_reviewer"]) {
+    const mine = stages.filter((s) => s.role === col);
+    if (mine.length) {
+      for (const s of mine) add(col, { key: s.key, role: col, label: s.label, sub: [s.route, s.model].filter(Boolean).join(" / "), st: s.status, via: s.via, turn: s.turn, t0: s.startedAt, t1: s.endedAt, usd: s.usd, text: s.text });
+    } else {
+      const skip = (col === "planner" || col === "researcher") ? (anyWorker || ended) : ended;
+      add(col, { key: col + "~", role: col, label: col.replace("_", " "), sub: skip ? "bỏ qua" : "chờ", st: skip ? "skipped" : "pending", ghost: true });
+    }
+  }
+
+  const endMap = { running: "pending", idle: "pending", done: "done", error: "failed", awaiting_human: "hold" };
+  add("end", { key: "end", role: "end", label: runSt === "awaiting_human" ? "awaiting_human" : runSt === "error" ? "error" : runSt === "done" ? "hoàn tất" : "—", sub: run ? `$${(Number(run.usd) || 0).toFixed(4)}` : "", st: endMap[runSt] || "pending" });
+
+  // manager seat: rotating (codex <-> deepseek-host); shows whoever turned last
+  const viaNodes = nodes.filter((n) => n.via === "manager");
+  const lastVia = viaNodes[viaNodes.length - 1];
+  const mgrRun = viaNodes.some((n) => n.st === "running");
+  const mgrSteps = (state?.steps ?? []).filter((s) => run && s.run === run.id && (s.role === "manager" || s.via === "manager"));
+  return { nodes, viaNodes, mgr: { key: "manager", role: "manager", label: "MANAGER seat", st: mgrRun ? "running" : viaNodes.length ? "done" : "pending", sub: lastVia ? `${lastVia.sub || ""} · turn ${lastVia.turn ?? "?"}` : "ghế xoay vòng · chưa có lượt", turns: mgrSteps.length, kind: "mgr" } };
+}
+
+const STATUS_TXT = { running: "● RUN", done: "XONG", failed: "HỎNG", pending: "CHỜ", skipped: "BỎ QUA", hold: "GIỮ", held: "GIỮ" };
+
+function nodeEl(n) {
+  const el = document.createElement("div");
+  el.dataset.k = n.key;
+  el.innerHTML = `<span class="fs"></span><div class="fr"></div><div class="fl"></div><div class="fm"></div><div class="ft"><span class="a"></span><b class="b"></b></div><div class="fb"><i></i></div>`;
+  return el;
+}
+
+function paintNode(el, n) {
+  const st = n.st === "held" ? "hold" : n.st;
+  el.className = `fn ${st}` + (n.kind ? ` kind-${n.kind}` : "") + (el.classList.contains("burst") ? " burst" : "");
+  el.querySelector(".fs").textContent = n.via === "manager" && st === "running" ? `MANAGER · t${n.turn ?? "?"}` : (STATUS_TXT[st] || st);
+  el.querySelector(".fr").textContent = n.role === "final_reviewer" ? "final reviewer" : n.role;
+  el.querySelector(".fl").textContent = n.label;
+  el.querySelector(".fm").textContent = n.sub || "";
+  const t = n.t0 ? (n.st === "running" ? `${((Date.now() - Date.parse(n.t0)) / 1000).toFixed(0)}s` : n.t1 ? `${((Date.parse(n.t1) - Date.parse(n.t0)) / 1000).toFixed(1)}s` : "") : "";
+  el.querySelector(".a").textContent = n.kind === "mgr" ? `${n.turns} step` : t;
+  el.querySelector(".b").textContent = n.usd != null ? money(n.usd) : "";
+  el.title = n.text || n.label;
+}
+
+function renderFlow() {
+  const m = flowModel();
+  const cols = $("fcols");
+  const sig = m.nodes.map((n) => n.col + ":" + n.key).join("|") + "#" + m.viaNodes.map((n) => n.key).join(",");
+  if (sig !== flowSig) {
+    flowSig = sig;
+    cols.innerHTML = COLS.map((c) => `<div class="fcol" data-c="${c.id}"><div class="fcap">${c.cap}</div></div>`).join("");
+    for (const n of m.nodes) cols.querySelector(`.fcol[data-c="${n.col}"]`).appendChild(nodeEl(n));
+    $("fmgr").innerHTML = "";
+    $("fmgr").appendChild(nodeEl(m.mgr));
+  }
+  for (const n of [...m.nodes, m.mgr]) {
+    const el = document.querySelector(`#fstage [data-k="${n.key}"]`);
+    if (el) paintNode(el, n);
+  }
+  const rs = state?.run?.status || "idle";
+  const tag = $("flowtag");
+  tag.className = "tag " + ({ running: "run", done: "ok", error: "bad", awaiting_human: "turn" }[rs] || "wait");
+  tag.textContent = rs;
+  drawEdges(m);
+}
+
+function centre(el, side, box) {
+  const r = el.getBoundingClientRect();
+  const x = side === "r" ? r.right : side === "l" ? r.left : r.left + r.width / 2;
+  const y = side === "t" ? r.top : side === "b" ? r.bottom : r.top + r.height / 2;
+  return [x - box.left, y - box.top];
+}
+
+function drawEdges(m) {
+  const svg = $("fedges");
+  const box = $("fstage").getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+  const byCol = (c) => m.nodes.filter((n) => n.col === c);
+  const get = (k) => document.querySelector(`#fstage [data-k="${k}"]`);
+  const order = COLS.map((c) => c.id);
+  let out = "";
+  const edge = (a, b, cls, mgr) => {
+    const ea = get(a.key), eb = get(b.key);
+    if (!ea || !eb) return;
+    let p1, p2, d;
+    if (mgr) {
+      p1 = centre(ea, "t", box); p2 = centre(eb, "b", box);
+      const my = (p1[1] + p2[1]) / 2;
+      d = `M${p1[0]},${p1[1]} C${p1[0]},${my} ${p2[0]},${my} ${p2[0]},${p2[1]}`;
+    } else {
+      p1 = centre(ea, "r", box); p2 = centre(eb, "l", box);
+      const mx = (p1[0] + p2[0]) / 2;
+      d = `M${p1[0]},${p1[1]} C${mx},${p1[1]} ${mx},${p2[1]} ${p2[0]},${p2[1]}`;
+    }
+    const id = "e" + out.length;
+    out += `<path id="${id}" class="fedge ${cls}" d="${d}"/>`;
+    if (cls.includes("live")) out += `<circle class="fdot${mgr ? " mgr" : ""}" r="3.2"><animateMotion dur="${mgr ? 1.4 : 1.1}s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`;
+  };
+  for (let i = 0; i < order.length - 1; i++) {
+    const A = byCol(order[i]), B = byCol(order[i + 1]);
+    for (const a of A) for (const b of B) {
+      const live = b.st === "running" && (a.st === "done" || a.st === "running" || a.st === "skipped" || a.ghost);
+      const done = !live && (b.st === "done" || b.st === "failed" || b.st === "hold") && a.st !== "pending";
+      edge(a, b, live ? "live" : done ? "done" : "", false);
+    }
+  }
+  for (const v of m.viaNodes) edge(m.mgr, v, "mgr" + (v.st === "running" ? " live" : ""), true);
+  svg.innerHTML = out;
+}
+
+function flowPulse(s) {
+  if (!state?.run || s.run !== state.run.id) return;
+  const key = s.role === "laya" || s.role === "jev" ? "laya" : s.role === "manager" ? "manager" : s.label || s.role;
+  const el = document.querySelector(`#fstage [data-k="${CSS.escape(key)}"]`) || (s.role ? document.querySelector(`#fstage [data-k="${CSS.escape(s.role + "~")}"]`) : null);
+  if (!el) return;
+  el.classList.remove("burst"); void el.offsetWidth; el.classList.add("burst");
+  clearTimeout(BUBBLE_T.get(el));
+  BUBBLE_T.set(el, setTimeout(() => el.classList.remove("burst"), 900));
+  const old = el.querySelector(".fbub"); if (old) old.remove();
+  const b = document.createElement("div");
+  b.className = "fbub";
+  b.textContent = String(s.text || "").replace(/\s+/g, " ").slice(0, 70);
+  el.appendChild(b);
+  setTimeout(() => b.remove(), 3700);
+}
+
+window.addEventListener("resize", () => { if (state) renderFlow(); });
+
 function render() {
-  renderSub(); renderStages(); renderChips(); renderLog(); renderKpi();
+  renderSub(); renderFlow(); renderStages(); renderChips(); renderLog(); renderKpi();
 }
 
 $("chips").addEventListener("click", (e) => {
@@ -206,12 +428,13 @@ const es = new EventSource("/events");
 es.addEventListener("snapshot", (ev) => { state = JSON.parse(ev.data); render(); });
 es.addEventListener("step", (ev) => {
   if (!state) return;
-  state.steps.push(JSON.parse(ev.data));
+  const step = JSON.parse(ev.data);
+  state.steps.push(step);
   if (state.steps.length > 600) state.steps = state.steps.slice(-400);
-  renderChips(); renderLog();
+  renderChips(); renderLog(); flowPulse(step);
 });
 es.onerror = () => { $("dot").className = "dot off"; };
-setInterval(() => { if (state?.run?.status === "running") renderStages(); }, 1000);
+setInterval(() => { if (state?.run?.status === "running") { renderStages(); renderFlow(); } }, 1000);
 </script>
 </body>
 </html>
