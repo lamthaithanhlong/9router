@@ -195,6 +195,12 @@ export const DEFAULTS = {
     assume: {},               // { routeKey: usdPerCall } -- e.g. { cursor: 0.0335 }
   },
 
+  // The live dashboard (lib/dashboard.js + lib/ui/index.html): a tiny read-only HTTP server inside
+  // this process that shows a run while it happens. The owner asked for the link on every run, so
+  // jev_run prints it. It reads the same four files jev_watch reads and never makes a model call,
+  // which is what makes it free to leave open.
+  dashboard: { enabled: true, port: 8787 },
+
   // Ask before committing a child to a route that is known to answer nothing. Only routes whose
   // definition carries `probe: true` (cursor, today) are asked; probing codex, deepseek or
   // backup would spend quota or money to learn nothing. See lib/probe.js.

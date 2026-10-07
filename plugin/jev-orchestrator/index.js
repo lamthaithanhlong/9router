@@ -19,6 +19,7 @@ import { ToolFilter, denyFor } from "./lib/toolfilter.js";
 import { getChanges, runTests } from "./lib/changes.js";
 import { NAME, expandHome, resolveConfig } from "./lib/config.js";
 import { formatReport, runPipeline } from "./lib/pipeline.js";
+import { createDashboard } from "./lib/dashboard.js";
 import { recordRun } from "./lib/runlog.js";
 import { createQueue, idSource } from "./lib/queue.js";
 import { cfoLine } from "./lib/telemetry.js";
@@ -100,7 +101,7 @@ export function newQueue(cfg) {
   return createQueue({ ...cfg.cursorQueue, dir: expandHome(cfg.cursorQueue.dir) });
 }
 
-export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg), probe = null, rotation = new Map()) {
+export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg), probe = null, rotation = new Map(), uiUrl = () => null) {
   const laya = createLaya(cfg.laya, { log });
   const apiSpawn = createApiSpawn(cfg, { log });
   return {
@@ -202,7 +203,7 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         const costInfo = cost
           ? { thisTask: cost.taskUsd(), day, taskCap: cfg.cost.taskUsd, callCap: cfg.cost.callUsd }
           : null;
-        const text = formatReport(outcome, last, version, costInfo);
+        const text = formatReport(outcome, last, version, costInfo, uiUrl?.() ?? null);
         const calls = trace.filter((t) => t.role !== "laya").length;
         steps.step(`run done: $${(cost?.taskUsd() ?? 0).toFixed(4)}, ${calls} calls`, { run: stamp, status, calls, usd: cost?.taskUsd() ?? 0 });
         return text;
@@ -359,11 +360,19 @@ export function apply(ctx, userConfig) {
   // One probe cache per process, shared by every jev_run and by jev_probe, so a route is asked
   // once per ttlMs rather than once per child.
   const probe = cfg.probe?.enabled !== false ? createProbe({ ...cfg, probe: { ...cfg.probe, dataDir: expandHome(cfg.probe?.dataDir ?? "~/.9router") } }, { log }) : null;
+  // The live dashboard, started once per process next to the other shared state. Read-only and free
+  // (it tails files and the ledger); a busy port moves it to the next one and a failure to listen
+  // only logs a line. jev_run prints the URL in every report.
+  const dash = cfg.dashboard?.enabled === false ? null : createDashboard({
+    cfg, ledger, version, log,
+    port: cfg.dashboard?.port ?? 8787,
+    pageFile: new URL("./lib/ui/index.html", import.meta.url),
+  });
   const disposers = [];
 
   const mount = () => {
     if (disposers.length) return;
-    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe, rotation)));
+    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe, rotation, () => dash?.url() ?? null)));
     if (watchCost) disposers.push(ctx.tools.register(buildWatchTool(ctx, cfg, ledger, log, watchCost)));
     if (probe) disposers.push(ctx.tools.register(buildProbeTool(ctx, cfg, log, probe)));
     log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ jev_watch)" : ""}${probe ? " (+ jev_probe)" : ""}`);

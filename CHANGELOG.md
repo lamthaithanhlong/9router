@@ -13,6 +13,33 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-07
+
+### Added
+- **A live dashboard, and its link in every report** (`lib/dashboard.js`, `lib/ui/index.html`). A
+  read-only HTTP server inside the plugin process, bound to 127.0.0.1, started once when the plugin
+  loads. `jev_run` prints `Live: http://127.0.0.1:8787` as the second line of its report, and the
+  owner follows the run in a browser: one card per stage showing the route and model serving it,
+  `via manager` with the seat's turn number, a live second counter while it runs, the USD billed to
+  that stage, and the step feed streaming below with per-route filter chips and a "this run only"
+  toggle.
+
+  It reads the same four files `jev_watch` reads - step feed, run log, ledger, 9Router's read-only
+  SQLite - so watching costs no model call and no quota, which is the only reason it is safe to
+  leave open. `GET /state` serves the same snapshot as JSON and `GET /events` is SSE (snapshot on
+  connect, then one frame per new step line, heartbeats every 15s). A busy port moves to the next
+  one, an unreadable or half-written file is an empty list, and a failure to listen logs a single
+  line and lets the run continue: the dashboard can never break a run.
+- `dev/test/dashboard.test.mjs` - stage derivation, the current-run match, the HTTP surface, and a
+  clean stop.
+
+### Measured
+Live smoke test on the owner's machine: it found run `muydtyou` (awaiting_human with the planner on
+codex `via manager turn 1`, $0.1079, and worker-1 failed on backup), derived the CFO line from the
+real ledger (`codex 6/40 calls`, `deepseek 6373/20000000 tokens`), today's `$16.5371 / 638 calls`
+from 9Router, and the last ten upstream calls. `GET /` served the page, `/state` the snapshot and
+`/events` opened with `event: snapshot`.
+
 ## [0.7.3] - 2026-10-07
 
 ### Added

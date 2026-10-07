@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>jev · live</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px 20px 24px; background: #0e1117; color: #e6edf3;
+         font: 13px/1.45 -apple-system, "SF Pro Text", Segoe UI, sans-serif; }
+  h1 { font-size: 21px; margin: 0 0 2px; letter-spacing: -0.3px; }
+  h1 span { color: #a371f7; }
+  .sub { color: #8b949e; font-size: 12px; margin-bottom: 14px; }
+  .sub b { color: #e6edf3; font-weight: 600; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3fb950; vertical-align: middle; }
+  .dot.off { background: #6e7681; }
+
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 14px; align-items: start; }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap: 10px; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+
+  .box { border: 1px solid #2d333b; border-radius: 10px; background: #161b22; overflow: hidden; }
+  .box.running { border-color: #1f6feb; box-shadow: 0 0 0 1px rgba(31,111,235,.35); }
+  .box.done { border-color: #2ea043; }
+  .box.failed { border-color: #f85149; }
+  .box.waiting { opacity: .55; }
+  .box.ceo { border-color: #6e40c9; background: #1a1230; }
+  .box.cfo { border-color: #2f7d5b; background: #0f1f1a; }
+
+  .hd { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-bottom: 1px solid #2d333b;
+        background: rgba(255,255,255,.03); font-weight: 600; font-size: 12.5px; }
+  .tag { margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .5px; padding: 2px 6px;
+         border-radius: 20px; text-transform: uppercase; white-space: nowrap; }
+  .tag.ceo { background: #6e40c9; color: #fff; }
+  .tag.cfo { background #2f7d5b; }
+  .tag.cfo { background: #2f7d5b; color: #fff; }
+  .tag.run { background: #1f6feb; color: #fff; }
+  .tag.ok { background: #1a3f26; color: #56d364; }
+  .tag.bad { background: #4d1a1a; color: #f85149; }
+  .tag.wait { background: #30363d; color: #8b949e; }
+  .tag.turn { background: #4d3a12; color: #e3b341; }
+
+  .bd { padding: 8px 10px 9px; }
+  .model { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10.5px; color: #7d8590; margin-bottom: 5px; }
+  .txt { font-size: 11.5px; color: #c9d1d9; word-break: break-word; }
+  .money { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #2d333b; font-family: ui-monospace, Menlo, monospace;
+           font-size: 10.5px; color: #8b949e; display: flex; justify-content: space-between; gap: 8px; }
+  .money b { color: #e6edf3; font-weight: 600; }
+  .money .risk { color: #f85149; }
+  .bar { height: 3px; background: #21262d; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: #1f6feb; }
+
+  table.log { width: 100%; border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; }
+  table.log td { padding: 2px 7px; border-bottom: 1px solid #1c2128; vertical-align: top; }
+  table.log td.t { color: #6e7681; white-space: nowrap; }
+  table.log td.w { white-space: nowrap; }
+  .r-codex { color: #56d364; } .r-deepseek { color: #a371f7; } .r-cursor { color: #58a6ff; }
+  .r-backup { color: #d29922; } .r-laya { color: #e3b341; } .r-manager { color: #e3b341; }
+  .logwrap { max-height: 420px; overflow: auto; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 9px; border-bottom: 1px solid #2d333b; }
+  .chip { font-size: 10.5px; padding: 2px 7px; border-radius: 20px; border: 1px solid #30363d; color: #8b949e;
+          cursor: pointer; user-select: none; background: transparent; }
+  .chip.on { border-color: #1f6feb; color: #58a6ff; }
+
+  .kpi { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 12px; }
+  .k { background: #161b22; border: 1px solid #2d333b; border-radius: 10px; padding: 8px 10px; }
+  .k .l { color: #8b949e; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; }
+  .k .v { font-size: 17px; font-weight: 650; margin-top: 1px; }
+  .k .d { color: #6e7681; font-size: 10.5px; }
+  .over { color: #f85149 !important; }
+</style>
+</head>
+<body>
+
+<h1><span>jev</span> · live <span id="dot" class="dot off"></span></h1>
+<div class="sub" id="sub">đang nối…</div>
+
+<div class="wrap">
+  <div class="cards" id="cards"></div>
+
+  <div class="col">
+    <div class="box ceo">
+      <div class="hd">HARNESS · head agent <span class="tag ceo">CEO / CTO</span></div>
+      <div class="bd">
+        <div class="model" id="ceo-model">deepseek-flash · @deepseek-ai/dsh-agent</div>
+        <div class="txt">Gọi jev_run, duyệt plan, quyết cuối. <b>awaiting_human</b> ở đây là việc của nó.</div>
+      </div>
+    </div>
+
+    <div class="box" id="logbox">
+      <div class="hd">SESSION LOG <span class="tag run" id="logtag">live</span></div>
+      <div class="chips" id="chips"></div>
+      <div class="logwrap"><table class="log" id="log"><tbody></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<div class="kpi">
+  <div class="k"><div class="l">Hôm nay (9Router)</div><div class="v" id="k-today">—</div><div class="d" id="k-today-d"></div></div>
+  <div class="k"><div class="l">Task này</div><div class="v" id="k-task">—</div><div class="d" id="k-task-d"></div></div>
+  <div class="k"><div class="l">Ví theo route</div><div class="v" id="k-wallet">—</div><div class="d" id="k-wallet-d"></div></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clock = (t) => (t ? new Date(t).toISOString().slice(11, 19) : "--:--:--");
+const money = (n) => "$" + (Number(n) || 0).toFixed(4);
+let state = null;
+let routes = new Set();
+let onlyRun = false;
+
+function pill(st) {
+  const map = { running: ["run", "● đang chạy"], done: ["ok", "xong"], failed: ["bad", "hỏng"],
+                waiting: ["wait", "chờ"], held: ["bad", "giữ"], ok: ["ok", "ok"] };
+  const [cls, text] = map[st] || ["wait", st || "?"];
+  return `<span class="tag ${cls}">${text}</span>`;
+}
+
+function stageCard(s, run) {
+  const isManager = s.via === "manager";
+  const badge = isManager ? `<span class="tag turn">via manager · turn ${esc(s.turn ?? "?")}</span>`
+                          : pill(s.status);
+  const model = [s.route, s.model].filter(Boolean).join(" / ") || "chưa chạy";
+  const elapsed = s.status === "running" && s.startedAt
+    ? `${((Date.now() - Date.parse(s.startedAt)) / 1000).toFixed(0)}s…`
+    : (s.startedAt && s.endedAt ? `${((Date.parse(s.endedAt) - Date.parse(s.startedAt)) / 1000).toFixed(1)}s` : "");
+  return `<div class="box ${esc(s.status)}">
+    <div class="hd">${esc(s.label)} ${badge}</div>
+    <div class="bd">
+      <div class="model">${esc(model)}</div>
+      <div class="txt">${esc((s.text || "").slice(0, 180))}</div>
+      <div class="money"><span>${esc(clock(s.startedAt))}${elapsed ? " · " + elapsed : ""}</span><b>${money(s.usd)}</b></div>
+      ${s.status === "running" ? '<div class="bar"><i style="width:100%"></i></div>' : ""}
+    </div></div>`;
+}
+
+function renderStages() {
+  const run = state?.run;
+  const cards = $("cards");
+  if (!run) { cards.innerHTML = '<div class="box"><div class="bd txt">Chưa có lần chạy nào. Step feed trống.</div></div>'; return; }
+  cards.innerHTML = run.stages.map((s) => stageCard(s, run)).join("");
+}
+
+function routeClass(r) { return "r-" + String(r || "x").replace(/[^a-z]/gi, ""); }
+
+function renderLog() {
+  const rows = (state?.steps ?? []).filter((s) => {
+    if (onlyRun && state?.run && s.run !== state.run.id) return false;
+    if (routes.size && s.route && !routes.has(s.route)) return false;
+    return true;
+  });
+  $("log").querySelector("tbody").innerHTML = rows.slice(-400).map((s) => `
+    <tr><td class="t">${esc(clock(s.ts))}</td>
+        <td class="w ${routeClass(s.route)}">${esc(s.route || s.role || "")}</td>
+        <td>${esc((s.text || "").slice(0, 150))}</td></tr>`).join("");
+  const el = document.querySelector(".logwrap");
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+function renderChips() {
+  const all = new Set((state?.steps ?? []).map((s) => s.route).filter(Boolean));
+  $("chips").innerHTML = [...all].map((r) => `<span class="chip ${routes.has(r) ? "on" : ""}" data-r="${esc(r)}">${esc(r)}</span>`).join("")
+    + `<span class="chip ${onlyRun ? "on" : ""}" data-only="1">chỉ lần này</span>`;
+}
+
+function renderKpi() {
+  const c = state?.cfo ?? {};
+  $("k-today").textContent = c.today ? money(c.today.usd) : "n/a";
+  $("k-today-d").textContent = c.today ? `${c.today.requests} call · phần lớn là giá list` : "9Router chưa đọc được";
+  const run = state?.run;
+  const used = run ? run.usd : 0;
+  const cap = state?.caps?.taskCap ?? 0.1;
+  $("k-task").textContent = money(used);
+  $("k-task-d").textContent = `trần ${money(cap)} (chỉ route tiền thật vào ví)`;
+  $("k-wallet").textContent = c.wallet || "—";
+  $("k-wallet").className = "v" + (c.wallet === "OVER CAP" ? " over" : "");
+  $("k-wallet-d").textContent = (c.perRoute ?? []).map((r) => `${r.key} ${r.used}/${r.daily} ${r.unit}`).join(" · ") || "chưa có hạn mức";
+}
+
+function renderSub() {
+  const s = state;
+  if (!s) return;
+  const run = s.run;
+  const st = run ? run.status : "idle";
+  const cls = { running: "run", done: "ok", awaiting_human: "turn", error: "bad" }[st] || "wait";
+  $("sub").innerHTML = `v${esc(s.version)} · <b>${esc(st)}</b> ${run ? "· " + esc(run.id) + " · " + esc(run.cwd || "") : ""}
+    · feed ${s.sources.steps} dòng / ${s.sources.runs} run · ledger ${esc(s.sources.ledgerDay || "?")}
+    · <span class="tag ${cls}" style="margin:0">${esc(st)}</span>`;
+  $("dot").className = "dot" + (st === "running" ? "" : " off");
+  $("logtag").textContent = st === "running" ? "live" : st;
+}
+
+function render() {
+  renderSub(); renderStages(); renderChips(); renderLog(); renderKpi();
+}
+
+$("chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  if (chip.dataset.only) onlyRun = !onlyRun;
+  else { const r = chip.dataset.r; routes.has(r) ? routes.delete(r) : routes.add(r); }
+  renderChips(); renderLog();
+});
+
+const es = new EventSource("/events");
+es.addEventListener("snapshot", (ev) => { state = JSON.parse(ev.data); render(); });
+es.addEventListener("step", (ev) => {
+  if (!state) return;
+  state.steps.push(JSON.parse(ev.data));
+  if (state.steps.length > 600) state.steps = state.steps.slice(-400);
+  renderChips(); renderLog();
+});
+es.onerror = () => { $("dot").className = "dot off"; };
+setInterval(() => { if (state?.run?.status === "running") renderStages(); }, 1000);
+</script>
+</body>
+</html>
