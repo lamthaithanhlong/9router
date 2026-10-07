@@ -71,12 +71,14 @@ test("ledger: persists, rolls over at midnight, free routes unmetered, Codex res
   assert.ok(b.canSpend("codex", 0, "final_reviewer"));
 });
 
-test("roles: researcher falls back to the free manager route when Codex is spent", () => {
+test("roles: with Codex spent the manager seat hands the researcher to its other member", () => {
   const { ledger } = ledgerAt();
   spend(ledger, "codex", 40);
-  const r = resolveRole("researcher", DEFAULTS, ledger, 100);
-  assert.ok(r.kind === "route" && r.route.key === "manager" && r.fellBack);
-  assert.equal(r.route.model, "manager-temp");
+  const r = resolveRole("researcher", DEFAULTS, ledger, 100, { rotation: new Map() });
+  assert.ok(r.kind === "route" && r.route.key === "deepseek", "DeepSeek-host holds the office this turn");
+  assert.equal(r.route.via, "manager", "the trace still names the office, not just the model");
+  assert.equal(r.route.model, "deepseek-v4.1-flash");
+  assert.equal(r.fellBack, false, "the seat is the first entry of the chain");
 });
 
 test("roles: with DeepSeek and Codex both spent the reviewer lands on the backup route; the worker stays on Cursor", () => {

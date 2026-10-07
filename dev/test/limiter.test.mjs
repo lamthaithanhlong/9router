@@ -13,12 +13,16 @@ import { formatTrace, runPipeline } from "../../plugin/jev-orchestrator/lib/pipe
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
 const tick = () => new Promise((r) => setImmediate(r));
 
-test("defaults: Cursor is capped at 3 children and starts are spaced out; cursor-workers and manager-temp share the cap", () => {
+test("defaults: Cursor is capped at 3 children, starts are spaced out, and only cursor shares that cap", () => {
   assert.equal(DEFAULTS.limits.concurrency.cursor, 3);
   assert.ok(DEFAULTS.limits.startGapMs.cursor >= 1000);
   assert.equal(DEFAULTS.routes.cursor.group, "cursor");
-  assert.equal(DEFAULTS.routes.manager.group, "cursor", "manager-temp is Cursor too and must count against the same cap");
   assert.notEqual(DEFAULTS.routes.backup.group, "cursor");
+  // The manager office is a seat now: no group, cost or probe flag of its own. Its members carry
+  // those, and each is counted against its own upstream.
+  assert.deepEqual(DEFAULTS.routes.manager.rotate, ["codex", "deepseek"]);
+  assert.equal(DEFAULTS.routes.manager.group, undefined);
+  assert.equal(DEFAULTS.routes.manager.probe, undefined);
 });
 
 test("limiter: never more than the cap run at once, the rest wait in order, and a release lets the next in", async () => {
@@ -190,13 +194,14 @@ test("jev_run accepts the limit itself and tells the model about the cap", async
   assert.equal(ctx.starts.length, 6);
 });
 
-test("pipeline: manager-temp children count against the Cursor cap too (same upstream, different route)", async () => {
-  // Codex out of calls: the researchers fall back to manager-temp, which is Cursor
-  const h = harness({ limiter: new Limiter({ limits: { cursor: 2 } }) });
+test("pipeline: manager-seat children are metered by the member's own upstream", async () => {
+  // Codex out of calls: the seat's turn logic hands the researchers to DeepSeek-host. They must be
+  // counted against DeepSeek's cap, not Cursor's, and not against the office.
+  const h = harness({ limiter: new Limiter({ limits: { deepseek: 2 } }) });
   for (let i = 0; i < 40; i++) h.deps.ledger.charge("codex", 0);
   await runPipeline(h.deps, input({ research: ["a", "b", "c"] }));
-  assert.equal(h.calls.filter((m) => m === "manager-temp").length, 3);
-  assert.equal(h.state.max, 2, "three Cursor researchers must still respect the cap of 2");
+  assert.equal(h.calls.filter((m) => m === "deepseek-v4.1-flash").length, 3);
+  assert.equal(h.state.max, 2, "three DeepSeek researchers must still respect the cap of 2");
 });
 
 test("one tool instance shares one cap across two simultaneous jev_run calls", async () => {

@@ -13,18 +13,34 @@ export const DEFAULTS = {
   toolTimeoutMs: 3_600_000,
 
   routes: {
-    codex: { provider: "router9", model: "codex-head", cost: "quota", group: "codex" },
+    // `usage` is how the call is found again in 9Router's `usageHistory` after it happened.
+    // Our own provider id and the combo name are useless for that: 9Router records the RESOLVED
+    // upstream call, so the combo codex-head appears as provider "codex" with a model like
+    // "gpt-6.1-sol". Matching on "router9"/"codex-head" matched NOTHING, and an unmatched route
+    // was then charged every row in the window (lib/cost.js reconcile) - i.e. other apps' traffic.
+    // Values are exact strings or a single trailing-* glob, compared case-insensitively.
+    codex: { provider: "router9", model: "codex-head", cost: "quota", group: "codex", usage: { provider: "codex" } },
     // Cursor through 9Router must be probed before a child is committed to it: it can answer
     // HTTP 200 with no text (ERROR_NOT_LOGGED_IN inside the stream, which 9Router records as
     // "[Empty streaming response]" and counts as success). A child that finds out the slow way
     // burns ~70s and, per the run log, has taken 1638s to abort. See lib/probe.js.
-    cursor: { provider: "router9", model: "cursor-workers", cost: "free", group: "cursor", probe: true },
-    manager: { provider: "router9", model: "manager-temp", cost: "free", group: "cursor", probe: true }, // also Cursor: shares its cap
-    deepseek: { provider: "deepseek-host", model: "deepseek-v4.1-flash", cost: "money", group: "deepseek" },
+    cursor: { provider: "router9", model: "cursor-workers", cost: "free", group: "cursor", probe: true,
+      usage: { provider: "cursor" } },
+    // The manager office: a SEAT, not a model. Codex and DeepSeek-host hold it alternately, so
+    // neither one's quota nor its wallet decides the job alone. The old manager-temp (a Cursor
+    // combo) is gone: it answered HTTP 200 with an empty body, and a seat nobody can sit in is
+    // worse than no seat. lib/roles.js expands this; the members keep their own group, cost and
+    // probe flags, and the ledger is charged to the member, never to "manager".
+    manager: { rotate: ["codex", "deepseek"] },
+    deepseek: { provider: "deepseek-host", model: "deepseek-v4.1-flash", cost: "money", group: "deepseek",
+      // The 9Router node this route points at is stored as "openai-compatible-chat-<uuid>" and the
+      // uuid changes if the owner re-creates the node, so match on the stable prefix + model.
+      usage: { provider: "openai-compatible-chat-*", model: "deepseek-v4.1-flash" } },
     // Last resort when everything above is out of quota or failing: a 9Router combo of free OpenCode and
     // OpenRouter models, tried in order. The combo itself is made in the 9Router dashboard
     // (PLUGIN-TEMPLATE.md section 11.8); it must also be listed under router9 in the Harness profile.
-    backup: { provider: "router9", model: "backup-free", cost: "free", backup: true, group: "backup" },
+    backup: { provider: "router9", model: "backup-free", cost: "free", backup: true, group: "backup",
+      usage: { provider: ["opencode", "openrouter"] } },
     // The Cursor APP as a worker, through files (lib/queue.js): the plugin writes a task into cursorQueue.dir and a
     // person tells the app to process it. Not on any chain by default: enable it with, in the plugin config,
     //   chains: { worker: [cursorqueue, backup] }
@@ -51,8 +67,8 @@ export const DEFAULTS = {
   // A role whose chain is out of budget is held for a human. It never spills
   // onto a route that is not on its own chain.
   chains: {
-    planner: ["codex", "manager", "backup"],
-    researcher: ["codex", "manager", "backup"],
+    planner: ["manager", "backup"],
+    researcher: ["manager", "backup"],
     worker: ["cursor", "backup"],
     reviewer: ["deepseek", "codex", "backup"],
     final_reviewer: ["codex", "backup"],
@@ -102,7 +118,7 @@ export const DEFAULTS = {
     // After a route fails at run time it is skipped for this long, so the next calls go straight to the next route.
     routeCooldownMs: 600_000,
     // Children running at once per upstream group, across ALL jev_run calls. More are queued, not refused.
-    // Cursor (cursor-workers and manager-temp) is capped at 3 because it rate-limited the owner.
+    // Cursor (cursor-workers) is capped at 3 because it rate-limited the owner.
     concurrency: { cursor: 3, codex: 2, deepseek: 2, backup: 2, cursorqueue: 3 },
     // Minimum gap between two child starts in a group, so a burst is spread out instead of landing at once.
     startGapMs: { cursor: 2000, codex: 1000, deepseek: 500, backup: 1000, cursorqueue: 0 },
@@ -180,7 +196,7 @@ export const DEFAULTS = {
   },
 
   // Ask before committing a child to a route that is known to answer nothing. Only routes whose
-  // definition carries `probe: true` (cursor, manager) are asked; probing codex, deepseek or
+  // definition carries `probe: true` (cursor, today) are asked; probing codex, deepseek or
   // backup would spend quota or money to learn nothing. See lib/probe.js.
   probe: {
     enabled: true,

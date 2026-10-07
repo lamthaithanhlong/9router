@@ -13,7 +13,7 @@ const SMALL = { files: [{ path: "src/a.js", added: 5, removed: 1 }], diff: "diff
 const RISKY = { files: [{ path: "src/auth/login.js", added: 5, removed: 1 }], diff: "diff --git auth" };
 const APPROVE = '{"verdict":"approve","issues":[]}';
 const CHANGES = '{"verdict":"changes","issues":["login.js:4 skips the check"]}';
-const CURSOR = "cursor-workers", CODEX = "codex-head", MANAGER = "manager-temp", DS = "deepseek-v4.1-flash", BACKUP = "backup-free";
+const CURSOR = "cursor-workers", CODEX = "codex-head", DS = "deepseek-v4.1-flash", BACKUP = "backup-free";
 
 function harness(s = {}) {
   const calls = [];
@@ -145,12 +145,14 @@ test("research goes to Codex and reaches the workers as a cut digest", async () 
   assert.ok(!worker.includes("w350"));
 });
 
-test("research falls back to the free manager route when Codex quota is spent", async () => {
+test("research: with Codex quota spent the manager seat sends the researcher to DeepSeek", async () => {
+  // The office rotates: Codex is out of calls, so DeepSeek-host holds it for this call. The worker
+  // chain in DEFAULTS is still [cursor, backup], so the task itself runs on Cursor.
   const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
   for (let i = 0; i < 40; i++) ledger.charge("codex", 0);
   const h = harness({ ledger, laya: { needs_review: 0 } });
   await runPipeline(h.deps, input({ research: ["q"] }));
-  assert.deepEqual(h.calls, [MANAGER, CURSOR]);
+  assert.deepEqual(h.calls, [DS, CURSOR]);
 });
 
 test("several tasks run as parallel workers; one crashing does not stop the rest", async () => {

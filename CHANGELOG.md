@@ -13,6 +13,51 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-07
+
+### Fixed
+- **Cost was attributed by the wrong identifier, so an unmatched route was charged the whole
+  machine** (`lib/cost.js` `reconcile`, new `usage` descriptor in `lib/config.js`). 9Router logs the
+  *resolved* upstream call, not the combo we asked for: our route `codex` is `router9/codex-head`,
+  but the row says `provider "codex"`, `model "gpt-6.1-sol"`; our route `deepseek` is
+  `deepseek-host/deepseek-v4.1-flash`, and the row says `provider "openai-compatible-chat-<uuid>"`.
+  Matching on our own identifiers matched **zero** rows, and the old fallback then summed *every* row
+  written after the watermark — the head agent's own calls, other harnesses, every other app on the
+  machine. Measured 2026-10-07: one worker call was billed `$3.5211` of other processes' traffic,
+  `taskUsd` reached `$3.63` against a `$0.10` cap, the `deepseek` route was refused, and the run fell
+  through to Cursor, where it hung 627s and produced nothing. A route now carries a `usage`
+  descriptor (exact string, list, or trailing-`*` glob) naming what 9Router will actually write, and
+  **a route that matches nothing is charged `$0`** and reports `unmatched` instead of swallowing the
+  window. Under-charging hides spend; over-charging silently kills the run.
+- **The task wallet counted list prices from free routes** (`lib/pipeline.js`). `chargeTaskUsd` ran
+  for every route, so the fictional USD 9Router writes for a free relay could push a run over its cap
+  and knock it off the only route that costs real money. Only `cost === "money"` routes feed the
+  wallet now; the step feed and the trace still report the raw number, because the owner must see it.
+- **Retry multiplication was invisible.** A combo that retries once per member writes N rows for one
+  logical call (measured on a second Mac: one 52,794-token prompt, 7 rows of `$0.110868`, zero output
+  tokens). The trace now carries `attempts`, the step feed says `(7 upstream attempts)`, and the
+  learned per-call cost then makes the per-call cap refuse that route next time.
+
+### Added
+- **The `manager` office is a rotating seat** (`lib/roles.js`, `lib/config.js`). `manager` is no
+  longer a route pointing at the dead `manager-temp` Cursor combo (HTTP 200, empty body): it is
+  `{ rotate: ["codex", "deepseek"] }`, and `planner`/`researcher` now start there. Round-robin on
+  purpose — Codex and DeepSeek-host take turns, so neither one's quota nor its wallet decides the job
+  alone. A member that is skipped, cooling or out of budget hands the turn over without disturbing
+  the alternation; when no member can take it, the chain falls through to `backup`. The counter is
+  one `Map` per process, beside `health` and the limiter, so turns keep alternating across every
+  `jev_run`. The returned route is always the **member** (its key, caps, probe flag and ledger), with
+  `via: "manager"` and `turn: N` for the trace and the step feed.
+- `dev/test/roles.test.mjs`, and a rewritten attribution suite in `dev/test/cost.test.mjs`.
+
+### Measured
+Against the live 9Router database (4238 rows) with the new matching: `codex` → 648 calls/$32.7154,
+`cursor` → 2457/$245.9037, `deepseek` → 17/$0.0109, `backup` → 635/$0.0000 — each one exactly the
+rows that upstream wrote, where the old code charged all 4238 to whichever route asked first. The
+seat was exercised live as well: five consecutive `planner` resolutions give
+`codex → deepseek → codex → deepseek → codex` (`turn` 1..5), and with Codex out of quota every turn
+goes to DeepSeek. `probe: true` now exists on `cursor` alone.
+
 ## [0.7.1] - 2026-10-07
 
 ### Fixed

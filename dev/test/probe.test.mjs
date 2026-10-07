@@ -133,7 +133,7 @@ test("probe: falls back to the active key in 9Router's own database when the env
 
 test("probe: only the routes flagged probe:true are asked", () => {
   const { probe } = probeWith(async () => pong());
-  assert.deepEqual(probe.probedRouteKeys().sort(), ["cursor", "manager"]);
+  assert.deepEqual(probe.probedRouteKeys().sort(), ["cursor"], "the manager office is a seat now: codex and deepseek answer when they answer, so probing them would spend quota or money for nothing");
 });
 
 test("probe: an unknown route is a failure, never a throw", async () => {

@@ -99,7 +99,7 @@ export function newQueue(cfg) {
   return createQueue({ ...cfg.cursorQueue, dir: expandHome(cfg.cursorQueue.dir) });
 }
 
-export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg), probe = null) {
+export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg), probe = null, rotation = new Map()) {
   const laya = createLaya(cfg.laya, { log });
   const apiSpawn = createApiSpawn(cfg, { log });
   return {
@@ -158,6 +158,7 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         trace,
         health,
         limiter,
+        rotation, // the manager seat's turn counter, shared by every jev_run in this process
         aborted: () => exec.signal?.aborted === true,
         cfg,
         ledger,
@@ -305,8 +306,8 @@ export function buildProbeTool(ctx, cfg, log = () => {}, probe) {
     name: "jev_probe",
     description:
       "Ask every route that can go silent whether it really answers. One small upstream call per probed route " +
-      "(cursor and manager only: codex, deepseek and backup answer when they answer, and probing them would " +
-      "spend quota or money for nothing). No subagent is started, no prompt file is read.",
+      "(cursor only: codex, deepseek and backup answer when they answer, and probing them would spend " +
+      "quota or money for nothing). No subagent is started, no prompt file is read.",
     parameters: { type: "object", properties: {} },
     output: { schema: { type: "string" }, render: (_args, value) => [{ type: "text", text: value }] },
     timeoutMs: Math.max(60_000, (cfg.probe?.timeoutMs ?? 15_000) * 8),
@@ -341,6 +342,9 @@ export function apply(ctx, userConfig) {
   const limiter = newLimiter(cfg); // likewise: the Cursor cap holds across simultaneous runs
   const filter = new ToolFilter(cfg); // what this Harness refused to let a child filter name, learned once
   const queue = newQueue(cfg);
+  // The manager seat's turn counter. One per process, like health and the limiter, so turns keep
+  // alternating across every jev_run in this Harness instead of restarting at zero on each call.
+  const rotation = new Map();
   // jev_watch is the read-only companion tool: it only reads the steps file, 9Router SQLite, and the ledger.
   // The cost tracker is also cheap (a single read-only DB handle), so we create it once per process.
   const watchCost = cfg.cost?.enabled !== false ? createCostTracker({ ...cfg, cost: { ...cfg.cost, dbFile: expandHome(cfg.cost.dbFile) } }, { log }) : null;
@@ -351,7 +355,7 @@ export function apply(ctx, userConfig) {
 
   const mount = () => {
     if (disposers.length) return;
-    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe)));
+    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe, rotation)));
     if (watchCost) disposers.push(ctx.tools.register(buildWatchTool(ctx, cfg, ledger, log, watchCost)));
     if (probe) disposers.push(ctx.tools.register(buildProbeTool(ctx, cfg, log, probe)));
     log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ jev_watch)" : ""}${probe ? " (+ jev_probe)" : ""}`);
