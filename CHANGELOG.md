@@ -13,6 +13,48 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-07
+
+### Added
+- **Real cost per call and per task, read from 9Router's `usageHistory`/`usageDaily` SQLite log** (`lib/cost.js`,
+  `createCostTracker`). Before a call: `assumeUsd(routeKey)` returns `cfg.cost.assume[routeKey]` if the owner
+  has set one, else the in-process rolling average (exponential, weight 0.5), else 0. After a call:
+  `reconcile(watermark, { routeKey, provider, model })` sums the rows 9Router wrote during it; rows are matched
+  by provider/model when both are given and at least one matches, else every post-watermark row counts (children
+  run in parallel, so an unmatched row is still this run's spend). The result is charged to the per-task
+  accumulator. `dayUsd()` reads `usageDaily` for today's dateKey so the report can show "today via 9Router";
+  `recentCalls(limit)` lists the last N upstream calls. When 9Router is missing or `node:sqlite` is unavailable,
+  every method degrades to zero / null and the plugin still runs on the rules alone.
+- **`cost.callUsd` / `cost.taskUsd` caps that apply only to `cost === "money"` routes** (the owner's `mvn/*`
+  DeepSeek-Host routes; their per-token charges are the real spend). The recorded cost for every other route is
+  9Router's list price, not money leaving the account: `cu/*`, `oc/*`, `cx/*` and `jg/*` are free or subscription
+  relays and must never be throttled by it. So when a money route would exceed `callUsd` the pipeline walks the
+  chain as usual (try the next affordable route, and on reaching the end, hold the role for a person), and when
+  `taskUsd + assume > taskUsd` it stops the whole run with `awaiting_human` and the reason
+  `cost: task budget $X exceeded (spent $Y, this call ~$Z)`. `enforce: false` keeps both checks as warnings.
+- **A free live step stream** (`lib/steps.js`, `createSteps`, `~/.dsh/jev-steps.jsonl`). One JSON line per
+  transition: `run started`, `worker-1 started on cursor-workers`, `worker-1 done in 12.5s, $0.0011`,
+  `tests: exit 1 (red)`, `gate: diff 210 lines > 150 -> review`, `reviewer verdict: changes (2 reasons)`,
+  `fix round 1/2`, `run done: $0.1904, 34 calls`. The `run` key is `Date.now().toString(36)` so every line of
+  one run shares it. `mkdirSync` first, `appendFileSync`, swallow and log once on write failure: a full disk
+  must not kill a run.
+- **`watch.mjs` fix and step source.** `watch.mjs` previously read tokens from `requestDetails.data.tokens`,
+  but streaming rows record `{"prompt_tokens":0,"completion_tokens":0}` there — the real numbers and the
+  dollar cost live in `usageHistory` (`promptTokens`, `completionTokens`, `cost`). It now reads tokens and
+  dollars only from `usageHistory` and keeps `requestDetails` only for latency/status (which the live view
+  does not use), with a running `$` total. It also tails the new step feed by byte offset, printing
+  `HH:MM:SS  step   <text>` exactly like it already does for `jev-runs.jsonl`.
+- **`jev_watch` tool** — a second, read-only companion tool next to `jev_run`. Optional `lines` (default 30).
+  Returns plain text: the last `lines` entries from `~/.dsh/jev-steps.jsonl`, today's spend from
+  `usageDaily`, the last 10 upstream calls from `usageHistory`, and the current ledger contents. It performs
+  no model call and no subagent call — only file reads and the read-only SQLite handle — so checking
+  progress costs nothing. Registered only when `cfg.cost.enabled`.
+
+### Changed
+- `formatReport` gains a `Cost:` section, printed even when nothing was spent:
+  `Cost: $0.1904 this task (task cap $0.08, call cap $0.001)` / `$6.7086 today via 9Router, 200 calls`
+  (or `today: n/a` when 9Router is unreadable). The `Who ran:` block is unchanged.
+
 ## [0.6.5] - 2026-10-07
 
 ### Added

@@ -6,12 +6,14 @@
 // Cordis plugin contract: export `name`, `inject` and `apply(ctx, config)`.
 // No `Config` schema and no @deepseek-ai/* imports: the module has no runtime
 // dependencies, so it loads from a plain relative path in cordis.patch.yml.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createApiSpawn } from "./lib/api.js";
+import { createCostTracker } from "./lib/cost.js";
 import { createLaya } from "./lib/laya.js";
 import { Ledger } from "./lib/budget.js";
 import { RouteHealth } from "./lib/health.js";
 import { Limiter } from "./lib/limiter.js";
+import { createSteps } from "./lib/steps.js";
 import { ToolFilter, denyFor } from "./lib/toolfilter.js";
 import { getChanges, runTests } from "./lib/changes.js";
 import { NAME, expandHome, resolveConfig } from "./lib/config.js";
@@ -143,8 +145,14 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
       };
       let last;
       const trace = [];
-      const stamp = Date.now().toString(36);
+      const stamp = Date.now().toString(36); // run id: one per jev_run; shared by every step line and every task id
       const nextTaskId = idSource(stamp);
+      // Cost tracker + step writer are fresh per run so the per-task accumulator starts at zero.
+      const cost = cfg.cost?.enabled !== false
+        ? createCostTracker({ ...cfg, cost: { ...cfg.cost, dbFile: expandHome(cfg.cost.dbFile) } }, { log })
+        : null;
+      const steps = createSteps({ ...cfg, stepsFile: expandHome(cfg.stepsFile) }, { log });
+      steps.step("run started", { run: stamp });
       const deps = {
         trace,
         health,
@@ -154,6 +162,9 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         ledger,
         laya,
         log,
+        cost,
+        steps,
+        runId: stamp,
         loadPrompt,
         spawn: (route, prompt, label, role) => {
           if (route.provider === "api") {
@@ -182,7 +193,15 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
       try {
         const outcome = await runPipeline(deps, input);
         status = outcome.status;
-        return formatReport(outcome, last, version);
+        // Pull today's spend from 9Router before formatting; the report always shows a Cost line when cost is on.
+        const day = cost ? await cost.dayUsd() : null;
+        const costInfo = cost
+          ? { thisTask: cost.taskUsd(), day, taskCap: cfg.cost.taskUsd, callCap: cfg.cost.callUsd }
+          : null;
+        const text = formatReport(outcome, last, version, costInfo);
+        const calls = trace.filter((t) => t.role !== "laya").length;
+        steps.step(`run done: $${(cost?.taskUsd() ?? 0).toFixed(4)}, ${calls} calls`, { run: stamp, status, calls, usd: cost?.taskUsd() ?? 0 });
+        return text;
       } catch (err) {
         error = err.message;
         throw err;
@@ -202,6 +221,80 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
   };
 }
 
+// `jev_watch` — a read-only companion tool that tells the owner what a run is up to
+// without spending a model call: the step feed is already on disk, and 9Router's
+// SQLite log is read-only. Registered only when cost tracking is enabled.
+export function buildWatchTool(ctx, cfg, ledger, log = () => {}, cost) {
+  const stepsFile = expandHome(cfg.stepsFile);
+  return {
+    name: "jev_watch",
+    description:
+      "Free progress view: the last lines from the step feed, today's spend via 9Router, the last 10 upstream calls, " +
+      "and the current ledger. Performs no model call and no subagent call — reads files and the read-only SQLite handle only.",
+    parameters: {
+      type: "object",
+      properties: {
+        lines: { type: "number", description: "How many step lines to print (default 30)." },
+      },
+    },
+    output: {
+      schema: { type: "string" },
+      render: (_args, value) => [{ type: "text", text: value }],
+    },
+    timeoutMs: 30_000,
+    async execute(args, exec) {
+      if (!exec.agent) throw new Error("jev_watch requires a calling agent (exec.agent was undefined)");
+      const limit = Number.isFinite(args.lines) ? Math.max(1, Math.min(500, args.lines)) : 30;
+      const stamp = (t) => new Date(t).toISOString().slice(11, 19);
+      const out = [];
+      // 1. Step feed (newest last). Parse the JSON line so we can pick a friendly text and the timestamp.
+      out.push(`Steps (${escape(sinceFileName(stepsFile))}):`);
+      try {
+        const raw = readFileSync(stepsFile, "utf8");
+        const entries = raw.split("\n").filter(Boolean).slice(-limit);
+        for (const line of entries) {
+          try {
+            const e = JSON.parse(line);
+            out.push(`  ${stamp(Date.parse(e.ts) || Date.now())}  ${String(e.text || "").slice(0, 160)}`);
+          } catch {
+            out.push(`  ${line.slice(0, 160)}`);
+          }
+        }
+        if (!entries.length) out.push("  (none yet)");
+      } catch (err) {
+        out.push(`  (unreadable: ${err.message})`);
+      }
+      // 2. Today's spend + recent upstream calls via 9Router.
+      if (cost) {
+        try {
+          const day = await cost.dayUsd();
+          out.push("", `Today (${day?.dateKey || "?"}): ${day ? `$${day.usd.toFixed(4)} via 9Router, ${day.requests} calls` : "n/a"}`);
+        } catch { out.push("", "Today: n/a"); }
+        try {
+          const recent = await cost.recentCalls(10);
+          if (recent.length) {
+            out.push("Last 9Router calls:");
+            for (const r of recent) {
+              out.push(`  ${stamp(new Date(r.timestamp).getTime())}  ${String(r.provider).padEnd(11)} ${String(r.model).padEnd(22)} $${r.cost.toFixed(4)}  ${r.promptTokens}/${r.completionTokens} tok`);
+            }
+          } else out.push("Last 9Router calls: (none)");
+        } catch { out.push("Last 9Router calls: n/a"); }
+      }
+      // 3. Today's ledger (per-route spend).
+      try {
+        const state = ledger.load();
+        out.push("", `Ledger (${state.day}):`);
+        const used = Object.entries(state.used || {}).filter(([, v]) => v > 0);
+        out.push(used.length ? used.map(([k, v]) => `  ${k}: ${v}`).join("\n") : "  (nothing yet)");
+      } catch { out.push("", "Ledger: (missing)"); }
+      return out.join("\n");
+    },
+  };
+}
+
+function sinceFileName(p) { return p.split("/").slice(-1)[0]; }
+function escape(s) { return String(s).replace(/[\r\n]/g, " "); }
+
 export function apply(ctx, userConfig) {
   const cfg = resolveConfig(userConfig ?? {});
   const ledger = new Ledger(expandHome(cfg.ledgerFile), cfg.budgets);
@@ -210,12 +303,16 @@ export function apply(ctx, userConfig) {
   const limiter = newLimiter(cfg); // likewise: the Cursor cap holds across simultaneous runs
   const filter = new ToolFilter(cfg); // what this Harness refused to let a child filter name, learned once
   const queue = newQueue(cfg);
-  let dispose;
+  // jev_watch is the read-only companion tool: it only reads the steps file, 9Router SQLite, and the ledger.
+  // The cost tracker is also cheap (a single read-only DB handle), so we create it once per process.
+  const watchCost = cfg.cost?.enabled !== false ? createCostTracker({ ...cfg, cost: { ...cfg.cost, dbFile: expandHome(cfg.cost.dbFile) } }, { log }) : null;
+  const disposers = [];
 
   const mount = () => {
-    if (dispose) return;
-    dispose = ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue));
-    log(`tool "${cfg.toolName}" registered (v${version})`);
+    if (disposers.length) return;
+    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue)));
+    if (watchCost) disposers.push(ctx.tools.register(buildWatchTool(ctx, cfg, ledger, log, watchCost)));
+    log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ jev_watch)" : ""}`);
   };
 
   // The tool needs the subagent provider; mount it whenever that appears.
@@ -223,9 +320,8 @@ export function apply(ctx, userConfig) {
     if (provider.name === cfg.subagentProvider) mount();
   });
   ctx.on("subagent/provider-removed", (providerName) => {
-    if (providerName !== cfg.subagentProvider || !dispose) return;
-    dispose();
-    dispose = undefined;
+    if (providerName !== cfg.subagentProvider || !disposers.length) return;
+    while (disposers.length) disposers.pop()();
   });
   if (ctx.subagents.getProvider(cfg.subagentProvider)) mount();
   else log(`subagent provider "${cfg.subagentProvider}" not registered yet; "${cfg.toolName}" will register when it appears`);

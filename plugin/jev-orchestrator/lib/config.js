@@ -158,6 +158,23 @@ export const DEFAULTS = {
   // Used when Laya is down.
   heuristics: { planChars: 400 },
 
+  // One file in JSON Lines per call the pipeline is about to make or just made, so
+  // `node watch.mjs` and `jev_watch` can show progress for free (no model call).
+  stepsFile: "~/.dsh/jev-steps.jsonl",
+
+  // Real dollar cost: read from 9Router's SQLite (`usageHistory`, `usageDaily`) and
+  // throttled per child call and per task. Caps only apply to `cost === "money"`
+  // routes; free or quota routes are still measured and reported, never refused.
+  cost: {
+    enabled: true,            // when false: tracker methods still work, but the caps below are inert
+    dbFile: "~/.9router/db/data.sqlite", // where 9Router keeps its call log
+    callUsd: 0.001,           // cap for ONE child call; over it -> next affordable route on the chain
+    taskUsd: 0.08,            // cap for ONE jev_run (all roles, all calls); over it -> awaiting_human
+    enforce: true,            // false = warn only, never refuse the call
+    // Manual USD-per-call per route. Wins over the rolling average the tracker learns in-process.
+    assume: {},               // { routeKey: usdPerCall } -- e.g. { cursor: 0.0335 }
+  },
+
   // External OpenAI-compatible HTTP API routes (lib/api.js). Off by default: the api_* routes are
   // stripped from `routes` and from every chain until api.enabled is true, so a config that does not
   // opt in sees no API at all. On opt-in, api routes are inserted right before `backup` in the four

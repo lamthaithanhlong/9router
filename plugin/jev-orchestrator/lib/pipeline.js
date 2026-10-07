@@ -5,6 +5,9 @@ import { resolveRole } from "./roles.js";
 
 // Host-independent core. `deps` carries everything that touches the outside:
 //   cfg, ledger, laya            config, spend counter, Laya client
+//   cost                         dollar-cost tracker (lib/cost.js); may be omitted by tests
+//   steps                        step feed writer (lib/steps.js); may be omitted by tests
+//   runId                        shared by every line in this run's step feed
 //   spawn(route, prompt, label, role)  run one child agent, resolve to its text
 //   loadPrompt(role)             role prompt text
 //   getChanges(cwd), runTests(cwd, command)
@@ -25,9 +28,38 @@ async function runAgent(deps, role, message, label) {
     }
     const { route } = res;
     deps.log(`${role} -> ${route.key}${res.fellBack ? " (fallback)" : ""}`);
+
+    // Cost caps: only money routes are refused. Free and quota routes are still measured and
+    // written to the step feed, but a list price (e.g. 9Router's recorded $0.0335 for a Cursor
+    // worker that is actually a free local relay) must never throttle them.
+    const costOn = !!deps.cost && cfg.cost?.enabled !== false && cfg.cost?.enforce !== false && route.cost === "money";
+    if (costOn) {
+      const assume = deps.cost.assumeUsd(route.key);
+      if (assume > cfg.cost.callUsd) {
+        // Over the per-call cap: skip this route, try the next affordable one on the chain.
+        skip.push(route.key);
+        attempts.push(`${route.key}: cost cap $${assume.toFixed(4)} > $${cfg.cost.callUsd}`);
+        deps.log(`${role} on ${route.key} skipped: cost cap $${assume.toFixed(4)} > $${cfg.cost.callUsd}`);
+        continue;
+      }
+      if (deps.cost.taskUsd() + assume > cfg.cost.taskUsd) {
+        // Over the per-task cap: stop the whole run.
+        return {
+          status: "held",
+          reason: `cost: task budget $${cfg.cost.taskUsd} exceeded (spent $${deps.cost.taskUsd().toFixed(4)}, this call ~$${assume.toFixed(4)})`,
+        };
+      }
+    }
+    // Record the start before any expensive work, so `node watch.mjs` shows it instantly.
+    deps.steps?.step(`${label} started on ${route.key}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd: costOn ? deps.cost.assumeUsd(route.key) : 0, taskUsd: deps.cost?.taskUsd() ?? 0 });
+
     let text = "";
     let tokensReal = null;
     let failure;
+    let usd = 0;
+    let calls = 0;
+    // Watermark: any usageHistory row written AFTER this id is this call's spend.
+    const watermark = deps.cost?.snapshot?.() ?? -1;
     // Wait for a slot on this route's upstream before starting the child (queue, never refuse).
     const release = (await deps.limiter?.acquire(route.group ?? route.key)) ?? (() => {});
     const queuedMs = release.queuedMs ?? 0;
@@ -56,6 +88,16 @@ async function runAgent(deps, role, message, label) {
       failure = err;
     } finally {
       release();
+      // True up the cost from 9Router's log: the real USD per call lives in usageHistory, not in
+      // the child's reply. Even when the call failed, a row was written.
+      if (deps.cost && watermark >= 0) {
+        try {
+          const r = await deps.cost.reconcile(watermark, { routeKey: route.key, provider: route.provider, model: route.model });
+          usd = r?.usd ?? 0;
+          calls = r?.calls ?? 0;
+          deps.cost.chargeTaskUsd(usd);
+        } catch { /* the tracker already logs once; the run continues */ }
+      }
       // A child that failed still consumed its input.
       deps.ledger.charge(route.key, tokensReal ? tokensReal.tokensIn + tokensReal.tokensOut : inTokens + estimateTokens(text));
       deps.trace.push({
@@ -72,7 +114,10 @@ async function runAgent(deps, role, message, label) {
         ...(queuedMs > 500 ? { queuedMs } : {}),
         tokensIn: tokensReal ? tokensReal.tokensIn : inTokens,
         tokensOut: tokensReal ? tokensReal.tokensOut : estimateTokens(text),
+        ...(calls > 0 ? { usd } : {}),
       });
+      // The step feed is the owner's free live view: every call has a start line and a done line.
+      deps.steps?.step(`${label} ${failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });
     }
     if (!failure) {
       if (route.backup && !deps.notes.some((n) => n.startsWith(`${role} ran on the BACKUP`))) {
@@ -297,12 +342,18 @@ export function formatTrace(trace = []) {
   return lines;
 }
 
-export function formatReport(outcome, changes, version) {
+export function formatReport(outcome, changes, version, cost) {
   const lines = [`jev_run: ${outcome.status}`];
   if (outcome.trace) lines.push("", "Who ran:", ...formatTrace(outcome.trace));
   if (outcome.plan) lines.push("", "Plan:", outcome.plan);
   if (outcome.triggers.length) lines.push("", `Review triggers: ${outcome.triggers.join("; ")}`);
   if (outcome.notes.length) lines.push("", "Notes:", ...outcome.notes.map((n) => `- ${n}`));
+  if (cost) {
+    // Cost section: the real per-task spend, today's via-9Router total, and the caps that gated the run.
+    const task = `$${cost.thisTask.toFixed(4)} this task (task cap $${cost.taskCap}, call cap $${cost.callCap})`;
+    const day = cost.day ? `$${cost.day.usd.toFixed(4)} today via 9Router, ${cost.day.requests} calls` : "today: n/a";
+    lines.push("", `Cost: ${task}`, `      ${day}`);
+  }
   if (changes?.files?.length) lines.push("", "Changed files:", ...changes.files.map((f) => `- ${f.path} (+${f.added} -${f.removed})`));
   if (outcome.status === "awaiting_human") lines.push("", "A human decision is needed; nothing was merged.");
   if (version) lines.push("", `Plugin: jev-orchestrator ${version}`);

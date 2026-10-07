@@ -43,7 +43,7 @@ test("module contract: name, inject, apply", () => {
 test("apply: registers jev_run when the spawn provider is present", () => {
   const f = fakeCtx();
   apply(f.ctx, {});
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch"]);
 });
 
 test("apply: waits for the provider, mounts when it appears, unmounts when it goes", () => {
@@ -53,11 +53,17 @@ test("apply: waits for the provider, mounts when it appears, unmounts when it go
   f.handlers.get("subagent/provider-added")({ name: "fork" });
   assert.equal(f.registered.length, 0); // some other provider
   f.handlers.get("subagent/provider-added")({ name: "spawn" });
-  assert.equal(f.registered.length, 1);
+  assert.equal(f.registered.length, 2);
   f.handlers.get("subagent/provider-added")({ name: "spawn" });
-  assert.equal(f.registered.length, 1); // not mounted twice
+  assert.equal(f.registered.length, 2); // not mounted twice
   f.handlers.get("subagent/provider-removed")("spawn");
   assert.equal(f.registered.length, 0);
+});
+
+test("apply: jev_watch is not registered when cost.enabled is false", () => {
+  const f = fakeCtx();
+  apply(f.ctx, { cost: { enabled: false } });
+  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run"]);
 });
 
 test("tool definition: schema shape the Harness expects", () => {
