@@ -195,6 +195,19 @@ export const DEFAULTS = {
     assume: {},               // { routeKey: usdPerCall } -- e.g. { cursor: 0.0335 }
   },
 
+  // The live child feed (lib/progress.js). The Harness announces only subagent/start and
+  // subagent/end for a child, so a step feed built from those alone goes silent for the whole
+  // call — measured 2026-10-07: cards read "đang chạy 431s…" with no line in between, and the
+  // owner asked why a running task returns no log. The child's own session log is on disk and is
+  // decoded here instead: one zstd frame per appended event, no model call, no HTTP.
+  progress: {
+    enabled: true,
+    pollMs: 1000,          // how often the child's session file is re-read
+    heartbeatMs: 30_000,   // a child that says nothing still gets a "vẫn chạy Ns…" line
+    maxLineChars: 180,     // one line per event, so a long message cannot flood the feed
+    sessionsDir: "~/.dsh/sessions",
+  },
+
   // The live dashboard (lib/dashboard.js + lib/ui/index.html): a tiny read-only HTTP server inside
   // this process that shows a run while it happens. The owner asked for the link on every run, so
   // jev_run prints it. It reads the same four files jev_watch reads and never makes a model call,

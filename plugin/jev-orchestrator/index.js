@@ -11,6 +11,7 @@ import { createApiSpawn } from "./lib/api.js";
 import { createCostTracker } from "./lib/cost.js";
 import { createProbe } from "./lib/probe.js";
 import { createLaya } from "./lib/laya.js";
+import { createProgress } from "./lib/progress.js";
 import { Ledger } from "./lib/budget.js";
 import { RouteHealth } from "./lib/health.js";
 import { Limiter } from "./lib/limiter.js";
@@ -49,7 +50,7 @@ const loadPrompt = (role) => readFileSync(new URL(`./prompts/${PROMPT_FILE[role]
 export { denyFor };
 
 // Run one child agent through the Harness subagent service and return its text.
-async function spawnChild(ctx, cfg, exec, route, prompt, label, role, { filter, log = () => {}, note = () => {} }) {
+async function spawnChild(ctx, cfg, exec, route, prompt, label, role, { filter, log = () => {}, note = () => {}, progress = null, step = null, runId } = {}) {
   const maxDepth = ctx.subagents.resolveMaxDepth(undefined);
   const start = (deny) =>
     ctx.subagents.start(cfg.subagentProvider, {
@@ -76,7 +77,14 @@ async function spawnChild(ctx, cfg, exec, route, prompt, label, role, { filter, 
       note(`child tool filter: this Harness does not let a filter name ${names}, so children may be offered ${dropped.join(", ")} (the depth limit still stops them from delegating)`);
     }
   }
+  // The child's session id is `run.id` — the same value the Harness publishes as subagent/start's
+  // identity.id. Reading that session's log is what turns four minutes of silence into a live feed;
+  // see lib/progress.js for why the Harness itself cannot supply it.
+  const feed = progress && run.id && step
+    ? progress.watch({ sessionId: run.id, label, role, route: route.key, runId, write: step })
+    : null;
   const [result] = await Promise.allSettled([run.result]);
+  feed?.stop();
   const [disposal] = await Promise.allSettled([Promise.resolve().then(() => run.dispose())]);
   if (result.status === "rejected") throw result.reason;
   if (disposal.status === "rejected") throw disposal.reason;
@@ -104,6 +112,8 @@ export function newQueue(cfg) {
 export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg), probe = null, rotation = new Map(), uiUrl = () => null) {
   const laya = createLaya(cfg.laya, { log });
   const apiSpawn = createApiSpawn(cfg, { log });
+  // The live child feed is shared by every run in this process; watching costs no model call.
+  const progress = createProgress(cfg.progress, { log });
   return {
     name: cfg.toolName,
     description:
@@ -185,6 +195,9 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
           return spawnChild(ctx, cfg, exec, route, prompt, label, role, {
             filter,
             log,
+            progress,
+            runId: stamp,
+            step: (text, extra) => steps.step(text, extra),
             // deps.notes belongs to the run in progress; each distinct note is added once
             note: (msg) => { if (deps.notes && !deps.notes.includes(msg)) deps.notes.push(msg); },
           });

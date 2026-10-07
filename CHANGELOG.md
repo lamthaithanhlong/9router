@@ -13,6 +13,32 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-07
+
+### Added
+- **A live feed of what each child is doing** (`lib/progress.js`). The Harness publishes only
+  `subagent/start` and `subagent/end` for a child, so a step feed built from those alone goes silent
+  for the whole call: on 2026-10-07 a worker card read `đang chạy · 224s…` with no line in between,
+  and the owner asked why a run that says it is running returns no log. The child's session log was
+  on disk the whole time — `<sessionsDir>/<project>/<sessionId>/session.v4.jsonl.zstd`, one zstd
+  frame per appended event — and `subagent/start`'s `identity.id` IS that `sessionId`.
+
+  `jev_run` now watches it: each poll decodes the frames appended since the last one and writes one
+  step line per assistant message, tool call and sandbox refusal, so the dashboard streams a child
+  while it works instead of only after it finishes. A child that says nothing for 30s still gets a
+  `vẫn chạy Ns…` line, because the silence was the complaint. Watching costs nothing: file reads
+  only, no model call, no HTTP.
+
+  The decoder deliberately holds back an unfinished trailing frame — measured on this machine, a
+  zstd frame cut to 12 bytes still decompresses (to `{"n`), so "it decompressed" is not "it is
+  complete", and trusting it would silently discard the rest of that event.
+
+### Notes
+- New config block `progress: { enabled, pollMs, heartbeatMs, maxLineChars, sessionsDir }`; defaults
+  are 1s polling, a 30s heartbeat, 180-char lines, and `~/.dsh/sessions`. Needs the runtime's
+  built-in zstd (`node:zlib`).
+
+
 ## [0.7.4] - 2026-10-07
 
 ### Added
