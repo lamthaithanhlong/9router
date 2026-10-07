@@ -1,0 +1,290 @@
+[
+ {
+  "cmd": "echo hi > out.txt",
+  "modifies": true
+ },
+ {
+  "cmd": "echo x >> notes.md",
+  "modifies": true
+ },
+ {
+  "cmd": "cat <<'EOF' > a.js\nconst x = 1;\nEOF",
+  "modifies": true
+ },
+ {
+  "cmd": "sed -i '' 's/a/b/' f.js",
+  "modifies": true
+ },
+ {
+  "cmd": "sed -i.bak s/a/b/ f",
+  "modifies": true
+ },
+ {
+  "cmd": "sed -n -i 1p f",
+  "modifies": true
+ },
+ {
+  "cmd": "perl -pi -e 's/a/b/' f",
+  "modifies": true
+ },
+ {
+  "cmd": "tee file.txt",
+  "modifies": true
+ },
+ {
+  "cmd": "printf x | tee -a log",
+  "modifies": true
+ },
+ {
+  "cmd": "mv a b",
+  "modifies": true
+ },
+ {
+  "cmd": "cp a b",
+  "modifies": true
+ },
+ {
+  "cmd": "rm -rf dist",
+  "modifies": true
+ },
+ {
+  "cmd": "cd src && rm a.js",
+  "modifies": true
+ },
+ {
+  "cmd": "touch x",
+  "modifies": true
+ },
+ {
+  "cmd": "mkdir -p src/new",
+  "modifies": true
+ },
+ {
+  "cmd": "ln -s a b",
+  "modifies": true
+ },
+ {
+  "cmd": "truncate -s 0 f",
+  "modifies": true
+ },
+ {
+  "cmd": "chmod +x run.sh",
+  "modifies": true
+ },
+ {
+  "cmd": "patch -p1 < fix.diff",
+  "modifies": true
+ },
+ {
+  "cmd": "dd if=a of=b",
+  "modifies": true
+ },
+ {
+  "cmd": "git commit -am wip",
+  "modifies": true
+ },
+ {
+  "cmd": "git apply fix.patch",
+  "modifies": true
+ },
+ {
+  "cmd": "git checkout -- file",
+  "modifies": true
+ },
+ {
+  "cmd": "git reset --hard",
+  "modifies": true
+ },
+ {
+  "cmd": "git stash",
+  "modifies": true
+ },
+ {
+  "cmd": "git add -A",
+  "modifies": true
+ },
+ {
+  "cmd": "git clean -fd",
+  "modifies": true
+ },
+ {
+  "cmd": "git -C /repo commit -m x",
+  "modifies": true
+ },
+ {
+  "cmd": "git push origin main",
+  "modifies": true
+ },
+ {
+  "cmd": "python3 -c \"open('a','w').write('x')\"",
+  "modifies": true
+ },
+ {
+  "cmd": "python3 - <<'EOF'\nopen('a','w').write('x')\nEOF",
+  "modifies": true
+ },
+ {
+  "cmd": "node -e \"require('fs').writeFileSync('a','x')\"",
+  "modifies": true
+ },
+ {
+  "cmd": "python3 -c \"import shutil; shutil.rmtree('d')\"",
+  "modifies": true
+ },
+ {
+  "cmd": "ls && echo done > log.txt",
+  "modifies": true
+ },
+ {
+  "cmd": "echo x &> all.log",
+  "modifies": true
+ },
+ {
+  "cmd": "sudo rm x",
+  "modifies": true
+ },
+ {
+  "cmd": "find . -name '*.tmp' | xargs rm",
+  "modifies": true
+ },
+ {
+  "cmd": "ls -la",
+  "modifies": false
+ },
+ {
+  "cmd": "cat file.js",
+  "modifies": false
+ },
+ {
+  "cmd": "grep -rn foo src",
+  "modifies": false
+ },
+ {
+  "cmd": "grep -n '>' file",
+  "modifies": false
+ },
+ {
+  "cmd": "echo \"a > b\"",
+  "modifies": false
+ },
+ {
+  "cmd": "echo hi",
+  "modifies": false
+ },
+ {
+  "cmd": "git status",
+  "modifies": false
+ },
+ {
+  "cmd": "git diff HEAD",
+  "modifies": false
+ },
+ {
+  "cmd": "git log --oneline | head",
+  "modifies": false
+ },
+ {
+  "cmd": "git fetch",
+  "modifies": false
+ },
+ {
+  "cmd": "git branch",
+  "modifies": false
+ },
+ {
+  "cmd": "git show HEAD",
+  "modifies": false
+ },
+ {
+  "cmd": "echo hi > /dev/null",
+  "modifies": false
+ },
+ {
+  "cmd": "ls 2>&1",
+  "modifies": false
+ },
+ {
+  "cmd": "cmd 2>/dev/null",
+  "modifies": false
+ },
+ {
+  "cmd": "ls > /dev/null 2>&1",
+  "modifies": false
+ },
+ {
+  "cmd": "echo oops >&2",
+  "modifies": false
+ },
+ {
+  "cmd": "node test.js",
+  "modifies": false
+ },
+ {
+  "cmd": "npm test",
+  "modifies": false
+ },
+ {
+  "cmd": "npm install",
+  "modifies": false
+ },
+ {
+  "cmd": "python3 -m unittest",
+  "modifies": false
+ },
+ {
+  "cmd": "find . -name '*.js'",
+  "modifies": false
+ },
+ {
+  "cmd": "head -5 f | tail -2",
+  "modifies": false
+ },
+ {
+  "cmd": "curl -s http://x | jq .",
+  "modifies": false
+ },
+ {
+  "cmd": "sed -n '1,5p' f",
+  "modifies": false
+ },
+ {
+  "cmd": "awk '{print $1}' f",
+  "modifies": false
+ },
+ {
+  "cmd": "diff a b",
+  "modifies": false
+ },
+ {
+  "cmd": "wc -l f",
+  "modifies": false
+ },
+ {
+  "cmd": "rg pattern",
+  "modifies": false
+ },
+ {
+  "cmd": "echo a | grep a",
+  "modifies": false
+ },
+ {
+  "cmd": "cd /tmp && ls",
+  "modifies": false
+ },
+ {
+  "cmd": "stat f",
+  "modifies": false
+ },
+ {
+  "cmd": "python3 - <<'EOF'\nprint(1 > 0)\nEOF",
+  "modifies": false
+ },
+ {
+  "cmd": "cat <<'EOF'\na > b\nEOF",
+  "modifies": false
+ },
+ {
+  "cmd": "ls | wc -l",
+  "modifies": false
+ }
+]

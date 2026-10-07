@@ -26,6 +26,7 @@ import { recordRun } from "./lib/runlog.js";
 import { createQueue, idSource } from "./lib/queue.js";
 import { cfoLine } from "./lib/telemetry.js";
 import { migrateLegacyFiles } from "./lib/legacy.js";
+import { applyForce } from "./lib/force.js";
 
 // package.json is the single source of truth for the version.
 function readVersion() {
@@ -423,6 +424,12 @@ export function apply(ctx, userConfig) {
     port: cfg.dashboard?.port ?? 8787,
     pageFile: new URL("./lib/ui/index.html", import.meta.url),
   });
+  // david-force (the skill's on/off switch): the head agent must use david. A broken force module must not take the plugin down.
+  try {
+    applyForce(ctx, { log, name: NAME });
+  } catch (err) {
+    log(`force: not started (${err.message ?? err})`);
+  }
   const disposers = [];
 
   const mount = () => {

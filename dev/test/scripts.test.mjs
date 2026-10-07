@@ -195,3 +195,48 @@ test("install renames jev_* tool names inside the plugin block only, keeps a bac
   assert.ok(!/tool names in the patch block renamed/.test(again), "nothing left to rename the second time");
   assert.equal(readFileSync(patch, "utf8"), after);
 });
+
+// ---- the david-force skill travels in the same zip: install.sh installs it (OFF), uninstall.sh takes it away ----------
+
+import { lstatSync } from "node:fs";
+const hookCommands = (home) => Object.values(JSON.parse(readFileSync(join(home, ".codex", "hooks.json"), "utf8")).hooks).flat().flatMap((g) => g.hooks.map((h) => h.command));
+
+test("install.sh installs the david-force skill OFF: copy, links, the david CLI and the Codex hooks; a second run changes nothing", () => {
+  const m = machine();
+  mkdirSync(join(m.home, ".codex"), { recursive: true });
+  writeFileSync(join(m.home, ".codex", "hooks.json"), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "other hook" }], matcher: "" }] } }));
+  const out = sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.match(out, /skill: .*skill copied to/);
+  assert.match(out, /skill: david-force: OFF/, "installed, not switched on");
+  assert.ok(existsSync(join(m.home, ".claude", "skills", "david-force", "SKILL.md")));
+  assert.ok(lstatSync(join(m.home, ".agents", "skills", "david-force")).isSymbolicLink());
+  assert.ok(lstatSync(join(m.home, ".codex", "skills", "david-force")).isSymbolicLink());
+  assert.ok(lstatSync(join(m.home, ".david-force", "bin", "david")).isSymbolicLink());
+  const cmds = hookCommands(m.home);
+  assert.ok(cmds.includes("other hook"), "somebody else's hook stays");
+  assert.equal(cmds.filter((c) => c.includes("david-force/scripts/")).length, 4);
+  assert.ok(!existsSync(join(m.home, ".david-force", "state.json")) || JSON.parse(readFileSync(join(m.home, ".david-force", "state.json"), "utf8")).on === false);
+  const again = sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.ok(!/skill copied to|hooks added/.test(again), "idempotent");
+  assert.equal(hookCommands(m.home).length, cmds.length);
+});
+
+test("install.sh --no-skill leaves the skill alone", () => {
+  const m = machine();
+  const out = sh("install.sh", ["--no-check", "--no-skill"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.ok(!/skill:/.test(out));
+  assert.ok(!existsSync(join(m.home, ".claude", "skills", "david-force")));
+});
+
+test("uninstall.sh removes the skill's hooks and links with the plugin, and --keep-skill keeps them", () => {
+  const m = machine();
+  mkdirSync(join(m.home, ".codex"), { recursive: true });
+  sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  sh("uninstall.sh", ["--keep-skill"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.equal(hookCommands(m.home).filter((c) => c.includes("david-force/scripts/")).length, 4, "--keep-skill keeps the skill");
+  const out = sh("uninstall.sh", [], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.match(out, /skill: Codex hooks removed/);
+  assert.equal(hookCommands(m.home).filter((c) => c.includes("david-force/scripts/")).length, 0);
+  assert.ok(!existsSync(join(m.home, ".david-force")));
+  assert.ok(!existsSync(join(m.home, ".agents", "skills", "david-force")));
+});

@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""david: call the david plugin from a shell (Codex, a terminal, a script).
+
+  david run --cwd REPO [--test CMD] [--plan yes|no] [--allowed GLOB]... [--research Q]... [--final-review] TASK...
+  david ask [--cwd DIR] [--words N] QUESTION...
+  david status
+
+The plugin's tools (david_run, david_ask) only exist inside DeepSeek Harness, so this starts a headless Harness on the
+owner's own profile, tells its agent to call the tool exactly once, and prints what the tool returned. The tool's text is
+read from the event stream (`--json`) by call id, not scraped from the agent's reply.
+
+Exit code: 0 ok, 10 awaiting_human, 11 failed, 1 anything else the tool reported, 2 the call itself did not work
+(Harness missing, the agent did not call the tool, timeout).
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+DSH = os.environ.get('DSH_BIN') or '/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh'
+PATCH = os.environ.get('DAVID_PATCH') or str(Path.home() / '.dsh' / 'profiles' / 'desktop' / 'cordis.patch.yml')
+WORKDIR = os.environ.get('DAVID_WORKDIR') or str(Path.home() / 'Documents' / 'deepseek-harness' / 'default-workspace')
+
+
+def build_prompt(tool: str, args: dict) -> str:
+    return (f'Call the {tool} tool exactly once with exactly these arguments (JSON): {json.dumps(args, ensure_ascii=False)}\n'
+            'Then reply with exactly the text the tool returned, and nothing else. Do not search, edit or run anything '
+            'yourself, and do not call any other tool.')
+
+
+def parse_stream(lines, tool: str):
+    """(result_text, status) of the first call to `tool`; (None, why) when it never produced one."""
+    call_id, head_text = None, ''
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except Exception:
+            continue
+        kind = ev.get('type')
+        if kind == 'tool_call' and ev.get('tool') == tool and call_id is None:
+            call_id = ev.get('callId')
+        elif kind == 'tool_result' and call_id is not None and ev.get('callId') == call_id:
+            return str(ev.get('result', '')), str(ev.get('status', ''))
+        elif kind in ('text', 'final') and ev.get('text'):
+            head_text = ev['text']
+    return None, ('the agent never called ' + tool + (': ' + head_text[:300] if head_text else ''))
+
+
+def exit_code(tool: str, text: str, status: str) -> int:
+    if status not in ('completed', 'ok', ''):
+        return 1
+    first = (text.splitlines() or [''])[0].strip()
+    word = first.split(':', 1)[1].strip() if ':' in first else ''
+    return {'ok': 0, 'done': 0, 'awaiting_human': 10, 'failed': 11}.get(word, 1)
+
+
+def call(tool: str, args: dict, timeout: int) -> int:
+    if not os.path.exists(DSH):
+        print(f'david: DeepSeek Harness runtime not found at {DSH} (set DSH_BIN)', file=sys.stderr)
+        return 2
+    cmd = [DSH, 'headless', '--patch', PATCH, '--json', build_prompt(tool, args)]
+    try:
+        proc = subprocess.run(cmd, cwd=WORKDIR if os.path.isdir(WORKDIR) else None, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f'david: {tool} did not finish within {timeout}s', file=sys.stderr)
+        return 2
+    text, status = parse_stream(proc.stdout.splitlines(), tool)
+    if text is None:
+        print(f'david: {status}', file=sys.stderr)
+        return 2
+    print(text)
+    return exit_code(tool, text, status)
+
+
+def cmd_status() -> int:
+    plugin = Path.home() / '.dsh' / 'profiles' / 'desktop' / 'plugins' / 'david-plugin' / 'package.json'
+    rows = [('Harness runtime', os.path.exists(DSH), DSH),
+            ('desktop patch', os.path.exists(PATCH), PATCH),
+            ('david plugin', plugin.exists(), '')]
+    if plugin.exists():
+        try:
+            rows[2] = ('david plugin', True, 'v' + json.loads(plugin.read_text()).get('version', '?'))
+        except Exception:
+            pass
+    ok = True
+    for label, good, extra in rows:
+        ok &= bool(good)
+        print(f"{'ok ' if good else 'MISSING'} {label} {extra}".rstrip())
+    return 0 if ok else 1
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog='david', description=__doc__.split('\n\n')[0])
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    r = sub.add_parser('run', help='change code in a git repository (plan, edit, test, review)')
+    r.add_argument('--cwd', required=True)
+    r.add_argument('--test', dest='test_command')
+    r.add_argument('--plan', choices=['yes', 'no'])
+    r.add_argument('--allowed', action='append', dest='allowed_paths')
+    r.add_argument('--research', action='append')
+    r.add_argument('--final-review', action='store_true')
+    r.add_argument('--timeout', type=int, default=3000)
+    r.add_argument('task', nargs='+')
+    a = sub.add_parser('ask', help='read-only question; the answer first, the evidence after')
+    a.add_argument('--cwd')
+    a.add_argument('--words', type=int, dest='max_words')
+    a.add_argument('--timeout', type=int, default=900)
+    a.add_argument('question', nargs='+')
+    sub.add_parser('status', help='is david reachable?')
+    ns = ap.parse_args(argv)
+    if ns.cmd == 'status':
+        return cmd_status()
+    if ns.cmd == 'ask':
+        args = {'question': ' '.join(ns.question)}
+        if ns.cwd:
+            args['cwd'] = os.path.abspath(os.path.expanduser(ns.cwd))
+        if ns.max_words:
+            args['max_words'] = ns.max_words
+        return call('david_ask', args, ns.timeout)
+    args = {'task': ' '.join(ns.task), 'cwd': os.path.abspath(os.path.expanduser(ns.cwd))}
+    for key in ('test_command', 'plan', 'allowed_paths', 'research'):
+        if getattr(ns, key):
+            args[key] = getattr(ns, key)
+    if ns.final_review:
+        args['final_review'] = True
+    return call('david_run', args, ns.timeout)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

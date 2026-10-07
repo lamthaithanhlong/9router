@@ -61,6 +61,18 @@ Rồi khởi động lại Harness.
 
 `dev/e2e/run.sh` chạy plugin trong Harness thật với model giả, không dùng khoá, không đụng `~/.dsh`. Cả hai kịch bản phải báo `PASS`.
 
+## Skill `david-force`: bắt buộc dùng david (bật/tắt)
+
+Cùng gói zip có thêm skill `david-force`; `install.sh` cài luôn (thêm `--no-skill` nếu không muốn), và cài ở trạng thái **TẮT**.
+
+```bash
+python3 ~/.claude/skills/david-force/scripts/force.py on       # bật: /david-force on
+python3 ~/.claude/skills/david-force/scripts/force.py off      # tắt: /david-force off
+python3 ~/.claude/skills/david-force/scripts/force.py status   # đang bật hay tắt, cái gì đã cài
+```
+
+Khi **BẬT**: DeepSeek Harness (agent đầu) và Codex không tự sửa file trong repo git được nữa, các lệnh sửa file bị từ chối kèm cách làm qua david (`david_run`, `david_ask`). Công tắc đọc ở mỗi lần gọi tool, nên bật/tắt không cần mở lại app. Codex gọi plugin bằng CLI `~/.david-force/bin/david run|ask|status`. Đọc file, và mọi thứ ngoài repo git (`~/.dsh`, `~/.codex`, `~/.claude`, `~/.agents`, `/tmp`), không bị chặn. Chi tiết và giới hạn: `skill/david-force/SKILL.md`.
+
 ## Version
 
 Bản này ghi trong `plugin/david-plugin/package.json` và `CHANGELOG.md`. `install.sh` in `version: <cũ> -> <mới>`; khi báo cáo cho người dùng, nêu số version đã cài. Harness chỉ chạy bản mới sau khi khởi động lại; dòng `Plugin: david-plugin <version>` ở cuối báo cáo `david_run` cho biết bản nào đang chạy thật.
@@ -71,7 +83,7 @@ Bản này ghi trong `plugin/david-plugin/package.json` và `CHANGELOG.md`. `ins
 ./uninstall.sh
 ```
 
-Xoá plugin, khối trong `cordis.patch.yml` (file về đúng như trước khi cài), và LaunchAgent. Sổ chi tiêu `~/.dsh/david-ledger.json` được giữ lại.
+Xoá plugin, khối trong `cordis.patch.yml` (file về đúng như trước khi cài), skill `david-force` (hook Codex, khối `AGENTS.md`, link; thêm `--keep-skill` để giữ) và LaunchAgent. Sổ chi tiêu `~/.dsh/david-ledger.json` được giữ lại.
 
 ## Viết plugin khác, hoặc dựng lại hệ thống
 

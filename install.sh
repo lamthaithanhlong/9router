@@ -2,11 +2,11 @@
 # Install david plugin into a DeepSeek Harness profile. Safe to re-run.
 # (Named "jev-orchestrator" up to 0.7.x: an install under that name is renamed in place.)
 #
-#   ./install.sh [--profile desktop] [--keepalive] [--no-check]
+#   ./install.sh [--profile desktop] [--keepalive] [--no-check] [--no-skill]
 #
 # Changes only: <profile>/plugins/david-plugin, one marked block appended to
-# <profile>/cordis.patch.yml (backed up first), $DSH_HOME/PLUGIN-TEMPLATE.md and,
-# with --keepalive, one LaunchAgent that keeps Laya running.
+# <profile>/cordis.patch.yml (backed up first), $DSH_HOME/PLUGIN-TEMPLATE.md, the david-force skill (links, the david CLI,
+# Codex hooks; installed OFF, skip with --no-skill) and, with --keepalive, one LaunchAgent that keeps Laya running.
 # DAVID_SKIP_LAUNCHCTL=1 writes the plist but leaves launchd alone (for tests).
 set -euo pipefail
 
@@ -16,12 +16,14 @@ DSH_BIN=${DSH_BIN:-/Applications/DeepSeek Harness.app/Contents/Resources/runtime
 PROFILE=desktop
 KEEPALIVE=0
 CHECK=1
+SKILL=1
 
 while [ $# -gt 0 ]; do
   case $1 in
     --profile) PROFILE=$2; shift 2 ;;
     --keepalive) KEEPALIVE=1; shift ;;
     --no-check) CHECK=0; shift ;;
+    --no-skill) SKILL=0; shift ;;
     -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -136,5 +138,16 @@ if [ "$KEEPALIVE" = 1 ]; then
   echo "Laya keepalive installed ($PLIST)"
 fi
 
+# 7. the david-force skill (same zip): the on/off switch that makes david mandatory for DeepSeek Harness and Codex.
+# It is installed OFF; `/david-force on` (or force.py on) turns the rule on.
+if [ "$SKILL" = 1 ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    DAVID_FORCE_DSH_HOME="$DSH_HOME" python3 "$HERE/skill/david-force/scripts/force.py" install | sed 's/^/skill: /'
+    DAVID_FORCE_DSH_HOME="$DSH_HOME" python3 "$HERE/skill/david-force/scripts/force.py" status | sed 's/^/skill: /'
+  else
+    echo "skill: python3 not found, so the david-force skill was not installed (the plugin itself is)" >&2
+  fi
+fi
+
 echo
-echo "Done. Restart DeepSeek Harness, then confirm the tool david_run is available."
+echo "Done. Restart DeepSeek Harness, then confirm the tools david_run and david_ask are available."

@@ -1,7 +1,7 @@
 import "./_sandbox.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -70,7 +70,7 @@ test("install.sh says which version it replaces", () => {
 
 function copyPkg() {
   const dir = join(tmp(), "pkg");
-  cpSync(PKG, dir, { recursive: true, filter: (p) => !/\/dist(\/|$)/.test(p) });
+  cpSync(PKG, dir, { recursive: true, filter: (p) => !/\/(dist|\.git)(\/|$)/.test(p) }); // the real .git is big and never packed
   return dir;
 }
 const build = (dir, outDir) => execFileSync("bash", [join(dir, "dev/build.sh"), "--skip-tests"], { encoding: "utf8", env: { ...process.env, OUT_DIR: outDir } });
@@ -90,6 +90,33 @@ test("build.sh produces a zip named with the version, containing that version", 
   const listing = execFileSync("unzip", ["-l", zip], { encoding: "utf8" });
   assert.ok(!/stale-previous-build/.test(listing), "dist/ leaked into the zip");
   assert.ok(!/\.DS_Store/.test(listing));
+});
+
+test("build.sh packs the plugin AND the david-force skill, and never the git history", () => {
+  const out = tmp();
+  const dir = copyPkg();
+  // a checkout has a .git folder, and a Python run leaves __pycache__: neither may ship
+  mkdirSync(join(dir, ".git", "objects"), { recursive: true });
+  writeFileSync(join(dir, ".git", "objects", "pack-huge"), "x".repeat(1000));
+  mkdirSync(join(dir, "skill", "david-force", "scripts", "__pycache__"), { recursive: true });
+  writeFileSync(join(dir, "skill", "david-force", "scripts", "__pycache__", "common.cpython-313.pyc"), "x");
+  build(dir, out);
+  const zip = join(out, `david-plugin-${version}.zip`);
+  const listing = execFileSync("unzip", ["-l", zip], { encoding: "utf8" });
+  assert.ok(!/\/\.git\//.test(listing), ".git leaked into the zip (it once made every zip twice the size of the last)");
+  assert.ok(!/__pycache__|\.pyc/.test(listing));
+  for (const want of ["install.sh", "uninstall.sh", "plugin/david-plugin/package.json", "plugin/david-plugin/lib/force.js",
+    "skill/david-force/SKILL.md", "skill/david-force/scripts/force.py", "skill/david-force/scripts/force_guard.py",
+    "skill/david-force/scripts/force_hook.py", "skill/david-force/scripts/david", "skill/david-force/tests/commands.json"]) {
+    assert.ok(listing.includes(`david-plugin/${want}`), `the zip is missing ${want}`);
+  }
+  assert.ok(statSync(zip).size < 3_000_000, `the zip is ${statSync(zip).size} bytes: something big got packed`);
+});
+
+test("build.sh refuses a package without the skill (a zip that cannot make david mandatory)", () => {
+  const dir = copyPkg();
+  rmSync(join(dir, "skill", "david-force", "SKILL.md"));
+  assert.throws(() => build(dir, tmp()), (e) => /missing skill\/david-force\/SKILL\.md/.test(e.stderr));
 });
 
 test("build.sh refuses a version that is not SemVer, or has no changelog entry", () => {

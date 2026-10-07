@@ -13,6 +13,33 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-07
+
+### Added
+- **The `david-force` skill: david is mandatory, with `/david-force on | off | status`** (`skill/david-force/`). The head
+  agent was free to ignore the rule in `AGENTS.md`; this makes it a hard guard, for DeepSeek Harness and for Codex, behind
+  one switch (`~/.david-force/state.json`, read on every call, so toggling needs no restart). It installs OFF.
+  - **DeepSeek Harness** (`lib/force.js`, loaded by the plugin): a `ctx.tools.guard()` refuses `edit`, `write` and
+    file-changing `bash` for the head agent when they touch a git repository (the model reads the refusal and calls
+    `david_run`); the plugin's own workers are sub-agents and are never refused; a system-prompt section carries the rule while
+    ON; a turn of six or more direct tool calls that never called a `david_*` tool is sent back once.
+  - **Codex** (`PreToolUse` guard, `UserPromptSubmit`, `PostToolUse` and `Stop` hooks in `~/.codex/hooks.json`, plus an
+    `AGENTS.md` block): direct file changes in a repository are denied with the way to do it through david; every prompt
+    restates the rule; a turn of five or more tool calls that never ran `david` is sent back once. Codex reaches the plugin
+    through the new **`david` CLI** (`~/.david-force/bin/david run|ask|status`), which starts a headless Harness on the
+    owner's profile, has its agent call `david_run` / `david_ask` once, and prints the tool's text taken from the event stream
+    by call id. Exit code: 0 ok, 10 awaiting_human, 11 failed, 2 the call itself did not work.
+  - **What it never blocks:** reads; anything outside a git repository (`~/.dsh`, `~/.codex`, `~/.claude`, `~/.agents`, `/tmp`,
+    plus `~/.david-force/allow.txt`); a repository rooted at `$HOME`; the `david` CLI. Python and JS decide what counts as a write
+    from one table (`skill/david-force/tests/commands.json`), so they cannot drift apart.
+- **One zip for both halves.** `david-plugin-<version>.zip` now holds the plugin and the skill, and `install.sh` installs both
+  (`--no-skill` to skip), `uninstall.sh` removes both (`--keep-skill` to keep it).
+
+### Fixed
+- **`dev/build.sh` packed the repository's `.git` folder into every zip.** The history holds every earlier zip, so each build was
+  about twice the size of the last (0.7.7 was 71 MB for 200 KB of files). The staging copy drops `.git` and `__pycache__`, the
+  build refuses to run when the plugin or the skill is missing from it, and a test bounds the size.
+
 ## [0.10.0] - 2026-10-07
 
 ### Added

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build dist/david-plugin-<version>.zip from this package.
+# Build dist/david-plugin-<version>.zip from this package: the plugin AND the david-force skill, no git history.
 #
 #   dev/build.sh [--skip-tests] [--e2e]
 #
@@ -35,7 +35,15 @@ OUT=$(cd "$OUT_DIR" && pwd)/david-plugin-$VERSION.zip
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 cp -R "$PKG" "$STAGE/david-plugin"
 rm -rf "$STAGE/david-plugin/dist"
+# The repository's own history is never part of a release: it holds every earlier zip, so including it made each build
+# about twice the size of the one before (0.7.7 was 71 MB for 200 KB of files).
+rm -rf "$STAGE/david-plugin/.git"
+find "$STAGE" -name __pycache__ -prune -exec rm -rf {} +
 find "$STAGE" -name .DS_Store -delete
+# One zip carries both halves: the plugin and the skill that makes it mandatory (install.sh installs both).
+for need in plugin/david-plugin/package.json skill/david-force/SKILL.md skill/david-force/scripts/force.py skill/david-force/scripts/david install.sh; do
+  [ -e "$STAGE/david-plugin/$need" ] || die "the zip would be missing $need"
+done
 rm -f "$OUT"
 ( cd "$STAGE" && zip -rq -X "$OUT" david-plugin )
 echo "built $OUT"
