@@ -72,6 +72,9 @@ export function decodeFrom(buf, from = 0) {
   return { text, offset };
 }
 
+const DENIAL_RE = /file access denied|operation not permitted|policy denial|blocked by (the )?sandbox/i;
+const DENIAL_HEAD_CHARS = 120;
+
 // One step line for a session event, or null when the event is noise. Kept deliberately narrow:
 // the feed is for a human watching a run, and 37 tool results per task would drown the three lines
 // that matter. Sandbox refusals are the exception — they are the one "result" that explains a child
@@ -94,9 +97,11 @@ export function summarise(entry, maxChars = 180) {
   if (entry?.type === "tool/result") {
     const content = d.message?.content ?? d.content;
     const text = oneLine(Array.isArray(content) ? content.filter((c) => c?.type === "text").map((c) => c.text).join(" ") : content);
-    return /file access denied|operation not permitted|policy denial|blocked by (the )?sandbox/i.test(text)
-      ? truncate(`⚠ ${text}`, maxChars)
-      : null;
+    // A real denial is the whole message, so the phrase sits in the first few dozen characters
+    // (measured: 17-65). A file dump that merely mentions the phrase (this very file's regex) hits at
+    // 5000+ and opens with <path>, so only the head is tested and dumps are skipped.
+    const head = text.slice(0, DENIAL_HEAD_CHARS);
+    return !/^<path>/.test(text) && DENIAL_RE.test(head) ? truncate(`⚠ ${text}`, maxChars) : null;
   }
   return null;
 }

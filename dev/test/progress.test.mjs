@@ -63,6 +63,11 @@ test("progress: only interesting events become lines", () => {
     summarise({ type: "tool/result", data: { message: { content: [{ type: "text", text: "[sandbox: file access denied under workspace-write mode]" }] } } }),
     /file access denied/,
   );
+  const res = (text) => summarise({ type: "tool/result", data: { message: { content: [{ type: "text", text }] } } });
+  // regression: reading a file that merely mentions the phrase must not raise the alarm
+  assert.equal(res("<path>/x/progress.js</path> <content> 1: /" + "a".repeat(5400) + "file access denied|policy denial"), null);
+  assert.equal(res("x".repeat(500) + " operation not permitted"), null);
+  assert.ok(res("bash: /etc/x: Operation not permitted").startsWith("⚠"));
   assert.equal(summarise({ type: "step/start", data: {} }), null);
 });
 
