@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jev.laya-keepalive</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>REPLACE_SCRIPT</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>60</integer>
+  <!-- laya-ctl start leaves Laya running as a child of this job. Without this key launchd
+       kills the job's whole process group when the job exits, which shuts Laya down again. -->
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>/tmp/jev-laya-keepalive.log</string>
+  <key>StandardErrorPath</key><string>/tmp/jev-laya-keepalive.log</string>
+</dict>
+</plist>

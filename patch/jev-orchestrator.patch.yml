@@ -1,0 +1,6 @@
+# jev-orchestrator:begin
+- insert:
+    - id: jev-orchestrator
+      name: ./plugins/jev-orchestrator/index.js
+      config: {}
+# jev-orchestrator:end

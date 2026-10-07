@@ -1,0 +1,9 @@
+{
+  "name": "jev-orchestrator",
+  "version": "0.6.0",
+  "description": "Cost-aware coding pipeline for DeepSeek Harness: Cursor works, Codex researches, DeepSeek reviews only risky diffs, Laya decides.",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "license": "MIT"
+}
