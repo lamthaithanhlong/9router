@@ -4,7 +4,7 @@ import { SANDBOX_HOME } from "./_sandbox.mjs";
 // ran out, which is exactly what the owner did not want.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isSeat, pickSeatMember, resolveRole } from "../../plugin/jev-orchestrator/lib/roles.js";
+import { isSeat, pickSeatMember, resolveRole } from "../../plugin/david-plugin/lib/roles.js";
 
 const cfg = () => ({
   routes: {

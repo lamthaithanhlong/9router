@@ -17,7 +17,7 @@ cleanup() { [ -n "$FAKE_PID" ] && kill "$FAKE_PID" 2>/dev/null || true; rm -rf "
 trap cleanup EXIT
 
 mkdir -p "$D/home" "$D/p/plugins" "$D/ws"
-cp -R "$PKG/plugin/jev-orchestrator" "$D/p/plugins/"
+cp -R "$PKG/plugin/david-plugin" "$D/p/plugins/"
 write_patch() {  # $1 = scenario. F also makes the child tool filter name a tool the Harness does not have.
   local extra=""
   [ "$1" = F ] && extra="        childTools: { denyAll: [jev_run, subagent, subagent_fork, workflow, bogus_tool_name], denyNonWorker: [write, edit] }"
@@ -32,8 +32,8 @@ write_patch() {  # $1 = scenario. F also makes the child tool filter name a tool
       router9: { displayName: fake, apiKeyEnv: FAKE_KEY, api: openai-completions, baseURL: "http://127.0.0.1:$PORT/v1", models: [{id: codex-head}, {id: manager-temp}, {id: cursor-workers}, {id: backup-free}, {id: full}] }
       deepseek-host: { apiKeyEnv: FAKE_KEY, api: openai-completions, baseURL: "http://127.0.0.1:$PORT/v1", models: [{id: deepseek-v4.1-flash, name: deepseek-v4.1-flash}] }
 - insert:
-    - id: jev-orchestrator
-      name: ./plugins/jev-orchestrator/index.js
+    - id: david-plugin
+      name: ./plugins/david-plugin/index.js
       config:
         runLog: $D/jev-runs.jsonl
         ledgerFile: $D/jev-ledger.json

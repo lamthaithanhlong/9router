@@ -4,7 +4,7 @@ Mẫu để viết plugin mới. Mở file này trước, làm theo khung ở §
 
 Muốn dựng cả hệ thống từ đầu (provider, khoá, model, combo, Laya): đọc **§11** trước, rồi quay lại §4.
 
-Plugin mẫu hoàn chỉnh nằm cạnh file này: `plugin/jev-orchestrator/` (một tool, gọi subagent, có ngân sách, có gate).
+Plugin mẫu hoàn chỉnh nằm cạnh file này: `plugin/david-plugin/` (một tool, gọi subagent, có ngân sách, có gate).
 
 ---
 
@@ -109,9 +109,9 @@ Plugin nằm ở `<profile>/plugins/my-plugin/`; `<profile>` là thư mục ch�
 
 ## 5. Tool gọi agent con
 
-Chép từ `plugin/jev-orchestrator/index.js` (`spawnChild`). Điểm cần giữ: cần provider subagent (nghe `subagent/provider-added`, gắn tool khi provider xuất hiện), luôn `dispose()` run, coi `stopReason !== "completed"` là lỗi kèm `diagnostic`, và truyền `exec.signal`.
+Chép từ `plugin/david-plugin/index.js` (`spawnChild`). Điểm cần giữ: cần provider subagent (nghe `subagent/provider-added`, gắn tool khi provider xuất hiện), luôn `dispose()` run, coi `stopReason !== "completed"` là lỗi kèm `diagnostic`, và truyền `exec.signal`.
 
-## 6. Quy tắc rút ra khi làm `jev-orchestrator`
+## 6. Quy tắc rút ra khi làm `david-plugin`
 
 1. **Tách lõi thuần khỏi keo Harness.** `lib/` nhận mọi thứ ngoài (spawn, đọc diff, chạy test, hỏi Laya) qua `deps`. Nhờ đó test được bằng agent giả, không cần boot Harness.
 2. **Không phụ thuộc lúc chạy.** Viết tool dưới dạng JSON Schema đã biên dịch, không import `defineTool`. Rồi kiểm bằng `defineTool` thật (§8 lệnh 2) để không lệch.
@@ -194,7 +194,7 @@ Phần này mô tả cách máy này đang chạy và cách nên đặt. **Đo**
 
 ```mermaid
 flowchart TB
-  A["Agent đầu của Harness<br/>(model mặc định: agent-default-model)"] -->|"gọi tool jev_run"| P["plugin jev-orchestrator<br/>vai · ngân sách · gate"]
+  A["Agent đầu của Harness<br/>(model mặc định: agent-default-model)"] -->|"gọi tool jev_run"| P["plugin david-plugin<br/>vai · ngân sách · gate"]
   P -->|"worker"| R9
   P -->|"planner / researcher / final_reviewer"| R9
   P -->|"reviewer (trả tiền)"| DS["deepseek-host<br/>modelapi.vn, gọi thẳng"]
@@ -355,7 +355,7 @@ Có ba nơi, từ nhanh đến chi tiết:
 |---|---|---|
 | **Báo cáo của `jev_run`**, mục `Who ran:` | từng vai, route (`provider/model`), khoá route, giây, token ước lượng; Laya trả bao nhiêu; dòng `not called:` liệt kê vai **không** chạy | `model` là tên **combo** (`codex-head`…), không phải model thật phía sau |
 | **Sổ chạy** `~/.dsh/jev-runs.jsonl` (một dòng mỗi lần `jev_run`, kể cả lần lỗi) | như trên, kèm thời điểm bắt đầu/kết thúc, `cwd`, `status`, lỗi | cũng chỉ thấy combo |
-| **`node ~/.dsh/profiles/desktop/plugins/jev-orchestrator/who.mjs [N]`** | N lần chạy gần nhất, cộng với những gì **9Router thực nhận** trong khoảng thời gian đó, theo `provider/model` thật | gộp cả traffic khác trong cùng cửa sổ (ví dụ agent đầu đang chat); `deepseek-host` gọi thẳng nên **không** hiện ở 9Router, chỉ hiện ở báo cáo và sổ chạy |
+| **`node ~/.dsh/profiles/desktop/plugins/david-plugin/who.mjs [N]`** | N lần chạy gần nhất, cộng với những gì **9Router thực nhận** trong khoảng thời gian đó, theo `provider/model` thật | gộp cả traffic khác trong cùng cửa sổ (ví dụ agent đầu đang chat); `deepseek-host` gọi thẳng nên **không** hiện ở 9Router, chỉ hiện ở báo cáo và sổ chạy |
 
 Cách đọc:
 
@@ -389,10 +389,10 @@ Dùng cho plugin khác: chép `dev/e2e/`, sửa `script.mjs` (kịch bản) và 
 | Chỗ | Cách lấy |
 |---|---|
 | `export const version` của plugin | đọc `package.json` lúc nạp |
-| cuối báo cáo `jev_run`: `Plugin: jev-orchestrator <version>` | từ `version` |
+| cuối báo cáo `jev_run`: `Plugin: david-plugin <version>` | từ `version` |
 | mỗi dòng sổ chạy `jev-runs.jsonl` (`"version"`) và `who.mjs` (`(plugin <version>)`) | từ `version` |
 | `install.sh`: `version: 0.2.0 -> 0.3.0` / `new install` / `same version reinstalled` | so `package.json` bản đang cài với bản mới |
-| tên zip `jev-orchestrator-plugin-<version>.zip` | `dev/build.sh` |
+| tên zip `david-plugin-<version>.zip` | `dev/build.sh` |
 | `CHANGELOG.md` | mục `## [<version>] - YYYY-MM-DD` |
 
 **Luật tăng version** (khi `MAJOR` còn là 0, tăng `MINOR` được phép đổi mặc định hoặc khoá cấu hình, nên đọc changelog trước khi nâng cấp):

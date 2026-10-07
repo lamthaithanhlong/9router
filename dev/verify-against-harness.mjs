@@ -5,9 +5,9 @@
 //
 // Reads the packages inside the app bundle; changes nothing.
 import assert from "node:assert/strict";
-import { buildTool } from "../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../plugin/jev-orchestrator/lib/budget.js";
-import { resolveConfig } from "../plugin/jev-orchestrator/lib/config.js";
+import { buildTool } from "../plugin/david-plugin/index.js";
+import { Ledger } from "../plugin/david-plugin/lib/budget.js";
+import { resolveConfig } from "../plugin/david-plugin/lib/config.js";
 
 const PKGS =
   process.env.DSH_PKGS ?? "/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai";

@@ -11,16 +11,16 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { runPipeline } from "../../plugin/jev-orchestrator/lib/pipeline.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
 const DS = "deepseek-v4.1-flash";
 const APPROVE = '{"verdict":"approve","issues":[]}';
 const RISKY = { files: [{ path: "src/auth/login.js", added: 9, removed: 2 }], diff: "diff --git a/src/auth/login.js" };
 
 async function loadApi() {
-  return import("../../plugin/jev-orchestrator/lib/api.js");
+  return import("../../plugin/david-plugin/lib/api.js");
 }
 
 function route(over = {}) {

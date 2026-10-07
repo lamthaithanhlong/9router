@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build dist/jev-orchestrator-plugin-<version>.zip from this package.
+# Build dist/david-plugin-<version>.zip from this package.
 #
 #   dev/build.sh [--skip-tests] [--e2e]
 #
@@ -18,7 +18,7 @@ for a in "$@"; do
 done
 
 PKG=$(cd "$(dirname "$0")/.." && pwd)
-VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$PKG/plugin/jev-orchestrator/package.json" | head -1)
+VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$PKG/plugin/david-plugin/package.json" | head -1)
 die() { echo "build refused: $*" >&2; exit 1; }
 
 echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || die "version '$VERSION' is not SemVer"
@@ -31,12 +31,12 @@ if [ "$E2E" = 1 ]; then "$PKG/dev/e2e/run.sh" || die "end-to-end check failed"; 
 
 OUT_DIR=${OUT_DIR:-$PKG/dist}
 mkdir -p "$OUT_DIR"
-OUT=$(cd "$OUT_DIR" && pwd)/jev-orchestrator-plugin-$VERSION.zip
+OUT=$(cd "$OUT_DIR" && pwd)/david-plugin-$VERSION.zip
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
-cp -R "$PKG" "$STAGE/jev-orchestrator-plugin"
-rm -rf "$STAGE/jev-orchestrator-plugin/dist"
+cp -R "$PKG" "$STAGE/david-plugin"
+rm -rf "$STAGE/david-plugin/dist"
 find "$STAGE" -name .DS_Store -delete
 rm -f "$OUT"
-( cd "$STAGE" && zip -rq -X "$OUT" jev-orchestrator-plugin )
+( cd "$STAGE" && zip -rq -X "$OUT" david-plugin )
 echo "built $OUT"
 shasum -a 256 "$OUT" | awk '{print "sha256 " $1}'

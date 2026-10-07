@@ -6,7 +6,7 @@ import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createDashboard, currentRun, stagesOf } from "../../plugin/jev-orchestrator/lib/dashboard.js";
+import { createDashboard, currentRun, stagesOf } from "../../plugin/david-plugin/lib/dashboard.js";
 
 const T = "2026-10-07T17:29:23.000Z";
 const step = (o) => JSON.stringify({ ts: T, run: "abc", text: "", ...o });
@@ -187,7 +187,7 @@ test("dashboard: a step appended while a page is connected also refreshes the sn
 test("page: the script compiles and every $(\"id\") it reads exists in the markup", async () => {
   const { readFileSync } = await import("node:fs");
   const { Script } = await import("node:vm");
-  const html = readFileSync(new URL("../../plugin/jev-orchestrator/lib/ui/index.html", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../../plugin/david-plugin/lib/ui/index.html", import.meta.url), "utf8");
   const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
   assert.ok(script, "the page has its script");
   new Script(script); // a syntax error would blank the whole dashboard

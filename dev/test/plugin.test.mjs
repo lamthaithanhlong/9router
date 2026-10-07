@@ -4,9 +4,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { apply, buildTool, inject, name } from "../../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
+import { apply, buildTool, inject, name } from "../../plugin/david-plugin/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 
 // A stand-in for the slice of the Cordis context the plugin touches.
 function fakeCtx({ withProvider = true, results = {} } = {}) {
@@ -35,7 +35,7 @@ function fakeCtx({ withProvider = true, results = {} } = {}) {
 }
 
 test("module contract: name, inject, apply", () => {
-  assert.equal(name, "jev-orchestrator");
+  assert.equal(name, "david-plugin");
   assert.deepEqual(inject, ["tools", "subagents"]);
   assert.equal(typeof apply, "function");
 });

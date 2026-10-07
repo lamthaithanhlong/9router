@@ -1,7 +1,7 @@
 # Changelog
 
 Format: [Keep a Changelog](https://keepachangelog.com). Versioning: [SemVer](https://semver.org), with the
-single source of truth in `plugin/jev-orchestrator/package.json`. While the major version is 0, a minor bump
+single source of truth in `plugin/david-plugin/package.json`. While the major version is 0, a minor bump
 may change defaults or config keys; read the entry before upgrading.
 
 How to bump (see `PLUGIN-TEMPLATE.md` §13):
@@ -12,6 +12,22 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 - **PATCH**: bug fixes and documentation only.
 
 ## [Unreleased]
+
+## [0.8.0] - 2026-10-07
+
+### Changed
+- **The plugin is now called "david plugin"** (it was `jev-orchestrator`). Id and folder `david-plugin`
+  (`plugin/david-plugin/`, `patch/david-plugin.patch.yml`), package name, the log prefix `[david-plugin]`, the
+  patch markers and id, the zip (`david-plugin-<version>.zip`, folder `david-plugin/` inside), the report footer
+  (`Plugin: david plugin <version>`) and the dashboard title.
+- **Deliberately unchanged:** the tools `jev_run` / `jev_probe` / `jev_watch`, the data files (`~/.dsh/jev-*.jsonl`,
+  `jev-ledger.json`), every config key, and the `AGENTS.md` rules that call the tools. Nothing the Harness agent
+  does needs to change.
+- **Upgrading:** run `./install.sh`, then restart the Harness. An install under the old name is renamed in place:
+  the new copy replaces `plugins/jev-orchestrator`, and in `cordis.patch.yml` only the block's id, plugin path and
+  its two markers are rewritten. The block itself (your routes, budgets, chains) is kept, never replaced by the
+  template, and the old file is saved next to it as `cordis.patch.yml.bak-rename-<time>`. `./uninstall.sh` removes an
+  install under either name.
 
 ### Added
 - **Planner and researcher share one MANAGER column in the FLOW graph** (`lib/ui/index.html`). Both are jobs of the

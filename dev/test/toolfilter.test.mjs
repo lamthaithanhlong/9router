@@ -5,10 +5,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildTool, denyFor } from "../../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { ToolFilter, refusedNames } from "../../plugin/jev-orchestrator/lib/toolfilter.js";
+import { buildTool, denyFor } from "../../plugin/david-plugin/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { ToolFilter, refusedNames } from "../../plugin/david-plugin/lib/toolfilter.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
 // verbatim from ~/.dsh/jev-runs.jsonl on the desktop profile (list shortened)

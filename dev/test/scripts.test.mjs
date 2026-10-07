@@ -77,7 +77,7 @@ test("install --keepalive writes a plist that points at this home's script and a
   const plist = readFileSync(m.plist, "utf8");
   assert.ok(plist.includes(join(m.dsh, "jev", "laya-keepalive.sh")));
   assert.match(plist, /AbandonProcessGroup<\/key><true\/>/);
-  assert.ok(existsSync(join(m.dsh, "profiles", "desktop", "plugins", "jev-orchestrator", "index.js")));
+  assert.ok(existsSync(join(m.dsh, "profiles", "desktop", "plugins", "david-plugin", "index.js")));
 });
 
 test("install then uninstall returns the patch file byte for byte", () => {
@@ -107,4 +107,64 @@ test("without the switch, install.sh does register the job (positive control for
   resetStub();
   sh("uninstall.sh", [], { HOME: m.home, DSH_HOME: m.dsh }, { skipLaunchctl: false });
   assert.ok(stubCalls().some((c) => c.startsWith("bootout")));
+});
+
+// The plugin was called "jev-orchestrator" up to 0.7.x. An existing install must become "david-plugin" without
+// losing the block the owner edited by hand (routes, budgets, chains live there).
+const OLD_BLOCK = [
+  "# jev-orchestrator:begin",
+  "- insert:",
+  "    - id: jev-orchestrator",
+  "      name: ./plugins/jev-orchestrator/index.js",
+  "      config:",
+  "        budgets: { codex: { daily: 123 } }   # hand-edited",
+  "# jev-orchestrator:end",
+  "",
+].join("\n");
+
+function oldInstall(m) {
+  const profile = join(m.dsh, "profiles", "desktop");
+  const patch = join(profile, "cordis.patch.yml");
+  const outside = "- id: other\n  name: keep-me\n";
+  writeFileSync(patch, outside + OLD_BLOCK + "# backend-review-mission:begin\n- id: mission\n# backend-review-mission:end\n");
+  mkdirSync(join(profile, "plugins", "jev-orchestrator"), { recursive: true });
+  writeFileSync(join(profile, "plugins", "jev-orchestrator", "package.json"), '{ "name": "jev-orchestrator", "version": "0.7.7" }');
+  writeFileSync(join(profile, "plugins", "jev-orchestrator", "index.js"), "// old\n");
+  return { profile, patch };
+}
+
+test("install over a jev-orchestrator install renames it in place and keeps the hand-edited block", () => {
+  const m = machine();
+  const { profile, patch } = oldInstall(m);
+  const before = readFileSync(patch, "utf8");
+  const out = sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.ok(!/new install/.test(out), "the old copy counts as the install being upgraded");
+  assert.match(out, /version: 0\.7\.7/, "the old version is read from the old folder");
+  assert.ok(!existsSync(join(profile, "plugins", "jev-orchestrator")), "the old copy is removed");
+  assert.ok(existsSync(join(profile, "plugins", "david-plugin", "index.js")));
+
+  const after = readFileSync(patch, "utf8");
+  assert.ok(!/jev-orchestrator/.test(after), "no trace of the old name is left in the patch");
+  assert.equal((after.match(/^# david-plugin:begin$/gm) ?? []).length, 1, "exactly one block, not the template appended on top");
+  assert.match(after, /^    - id: david-plugin$/m);
+  assert.match(after, /^      name: \.\/plugins\/david-plugin\/index\.js$/m);
+  assert.ok(after.includes("        budgets: { codex: { daily: 123 } }   # hand-edited\n"), "the owner's own config survives");
+  // everything outside the block is byte for byte what it was
+  assert.ok(after.startsWith("- id: other\n  name: keep-me\n"));
+  assert.ok(after.endsWith("# backend-review-mission:begin\n- id: mission\n# backend-review-mission:end\n"));
+  assert.ok(readdirSync(profile).some((f) => f.startsWith("cordis.patch.yml.bak-rename-")), "a backup of the old patch is kept");
+  assert.equal(readFileSync(join(profile, readdirSync(profile).find((f) => f.startsWith("cordis.patch.yml.bak-rename-"))), "utf8"), before);
+
+  // running it again changes nothing
+  const again = sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.match(again, /patch entry already present/);
+  assert.equal(readFileSync(patch, "utf8"), after);
+});
+
+test("uninstall removes an install that still has the old name", () => {
+  const m = machine();
+  const { profile, patch } = oldInstall(m);
+  sh("uninstall.sh", [], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.ok(!existsSync(join(profile, "plugins", "jev-orchestrator")));
+  assert.equal(readFileSync(patch, "utf8"), "- id: other\n  name: keep-me\n# backend-review-mission:begin\n- id: mission\n# backend-review-mission:end\n");
 });

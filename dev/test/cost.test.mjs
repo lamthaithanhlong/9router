@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createCostTracker, matchUsage } from "../../plugin/jev-orchestrator/lib/cost.js";
+import { createCostTracker, matchUsage } from "../../plugin/david-plugin/lib/cost.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-cost-"));
 

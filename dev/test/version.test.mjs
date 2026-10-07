@@ -6,15 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildTool, version } from "../../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { formatReport } from "../../plugin/jev-orchestrator/lib/pipeline.js";
-import { formatRun, readRuns } from "../../plugin/jev-orchestrator/who.mjs";
+import { buildTool, version } from "../../plugin/david-plugin/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { formatReport } from "../../plugin/david-plugin/lib/pipeline.js";
+import { formatRun, readRuns } from "../../plugin/david-plugin/who.mjs";
 
 const PKG = fileURLToPath(new URL("../../", import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
-const pkgJson = () => JSON.parse(readFileSync(join(PKG, "plugin/jev-orchestrator/package.json"), "utf8"));
+const pkgJson = () => JSON.parse(readFileSync(join(PKG, "plugin/david-plugin/package.json"), "utf8"));
 const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 // Stub launchctl first on PATH: nothing here may reach the real launchd.
@@ -40,7 +40,7 @@ test("CHANGELOG's newest released entry is this version, dated", () => {
 
 test("report footer names the plugin version; no footer when no version is given", () => {
   const out = { status: "done", notes: [], plan: "", triggers: [] };
-  assert.match(formatReport(out, undefined, "9.8.7"), /\n\nPlugin: jev-orchestrator 9\.8\.7$/);
+  assert.match(formatReport(out, undefined, "9.8.7"), /\n\nPlugin: david plugin 9\.8\.7$/);
   assert.ok(!/Plugin:/.test(formatReport(out)));
 });
 
@@ -63,7 +63,7 @@ test("install.sh says which version it replaces", () => {
   const env = { HOME: home, DSH_HOME: dsh };
   assert.match(run("install.sh", ["--no-check"], env), new RegExp(`version: new install, ${version}`));
   assert.match(run("install.sh", ["--no-check"], env), new RegExp(`version: ${version} \\(same version reinstalled\\)`));
-  const installed = join(dsh, "profiles", "desktop", "plugins", "jev-orchestrator", "package.json");
+  const installed = join(dsh, "profiles", "desktop", "plugins", "david-plugin", "package.json");
   writeFileSync(installed, readFileSync(installed, "utf8").replace(version, "0.0.1"));
   assert.match(run("install.sh", ["--no-check"], env), new RegExp(`version: 0\\.0\\.1 -> ${version.replace(/\./g, "\\.")}`));
 });
@@ -82,10 +82,10 @@ test("build.sh produces a zip named with the version, containing that version", 
   mkdirSync(join(dir, "dist"));
   writeFileSync(join(dir, "dist", "stale-previous-build.zip"), "x");
   const text = build(dir, out);
-  const zip = join(out, `jev-orchestrator-plugin-${version}.zip`);
+  const zip = join(out, `david-plugin-${version}.zip`);
   assert.ok(existsSync(zip));
   assert.match(text, /sha256 [0-9a-f]{64}/);
-  const inner = JSON.parse(execFileSync("unzip", ["-p", zip, "jev-orchestrator-plugin/plugin/jev-orchestrator/package.json"], { encoding: "utf8" }));
+  const inner = JSON.parse(execFileSync("unzip", ["-p", zip, "david-plugin/plugin/david-plugin/package.json"], { encoding: "utf8" }));
   assert.equal(inner.version, version);
   const listing = execFileSync("unzip", ["-l", zip], { encoding: "utf8" });
   assert.ok(!/stale-previous-build/.test(listing), "dist/ leaked into the zip");
@@ -94,7 +94,7 @@ test("build.sh produces a zip named with the version, containing that version", 
 
 test("build.sh refuses a version that is not SemVer, or has no changelog entry", () => {
   const dir = copyPkg();
-  const pj = join(dir, "plugin/jev-orchestrator/package.json");
+  const pj = join(dir, "plugin/david-plugin/package.json");
   const original = readFileSync(pj, "utf8");
   writeFileSync(pj, original.replace(version, "0.9"));
   assert.throws(() => build(dir, tmp()), (e) => /not SemVer/.test(e.stderr));

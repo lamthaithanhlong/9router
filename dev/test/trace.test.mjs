@@ -5,12 +5,12 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { formatReport, formatTrace, runPipeline } from "../../plugin/jev-orchestrator/lib/pipeline.js";
-import { recordRun } from "../../plugin/jev-orchestrator/lib/runlog.js";
-import { formatRun, readRuns, router9Window, windowSql } from "../../plugin/jev-orchestrator/who.mjs";
-import { buildTool } from "../../plugin/jev-orchestrator/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { formatReport, formatTrace, runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
+import { recordRun } from "../../plugin/david-plugin/lib/runlog.js";
+import { formatRun, readRuns, router9Window, windowSql } from "../../plugin/david-plugin/who.mjs";
+import { buildTool } from "../../plugin/david-plugin/index.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
 const SMALL = { files: [{ path: "src/a.js", added: 5, removed: 1 }], diff: "d" };

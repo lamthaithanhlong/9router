@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const NAME = "jev-orchestrator";
+export const NAME = "david-plugin";
 
 // Route keys point at provider/model pairs registered in the Harness profile
 // (cordis.patch.yml, entry llm-pi-ai). Provider "router9" is 9Router; its

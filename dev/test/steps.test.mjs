@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createSteps } from "../../plugin/jev-orchestrator/lib/steps.js";
+import { createSteps } from "../../plugin/david-plugin/lib/steps.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-steps-"));
 

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { zstdCompressSync } from "node:zlib";
-import { createProgress, decodeFrom, findSessionFile, frameStarts, summarise } from "../../plugin/jev-orchestrator/lib/progress.js";
+import { createProgress, decodeFrom, findSessionFile, frameStarts, summarise } from "../../plugin/david-plugin/lib/progress.js";
 
 // The child session file is one zstd frame per appended event, so the tests build exactly that:
 // frame(text) is one appended event, and every test asserts on what a poll would have produced.

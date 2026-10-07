@@ -4,10 +4,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { RouteHealth } from "../../plugin/jev-orchestrator/lib/health.js";
-import { formatReport, runPipeline } from "../../plugin/jev-orchestrator/lib/pipeline.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { RouteHealth } from "../../plugin/david-plugin/lib/health.js";
+import { formatReport, runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
 const SMALL = { files: [{ path: "src/a.js", added: 5, removed: 1 }], diff: "diff --git a/src/a.js" };
 const RISKY = { files: [{ path: "src/auth/login.js", added: 5, removed: 1 }], diff: "diff --git auth" };

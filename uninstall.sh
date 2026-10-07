@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove jev-orchestrator from a Harness profile. Leaves other patch entries,
+# Remove david-plugin from a Harness profile. Leaves other patch entries,
 # the spend ledger (~/.dsh/jev-ledger.json) and PLUGIN-TEMPLATE.md in place.
 # JEV_SKIP_LAUNCHCTL=1 leaves launchd alone (for tests).
 #
@@ -18,16 +18,20 @@ done
 
 PDIR=$DSH_HOME/profiles/$PROFILE
 PATCH=$PDIR/cordis.patch.yml
-DEST=$PDIR/plugins/jev-orchestrator
 
-if [ -f "$PATCH" ] && grep -q 'jev-orchestrator:begin' "$PATCH"; then
-  cp "$PATCH" "$PATCH.bak-jev-uninstall-$(date +%Y%m%d%H%M%S)"
-  awk '/# jev-orchestrator:begin/{skip=1} !skip{print} /# jev-orchestrator:end/{skip=0}' "$PATCH" > "$PATCH.tmp"
-  mv "$PATCH.tmp" "$PATCH"
-  echo "patch entry removed from $PATCH"
-fi
-
-case $DEST in */plugins/jev-orchestrator) rm -rf "$DEST"; echo "removed $DEST" ;; esac
+# "jev-orchestrator" is the name up to 0.7.x: remove an install under either name.
+for NAME in david-plugin jev-orchestrator; do
+  if [ -f "$PATCH" ] && grep -q "# $NAME:begin" "$PATCH"; then
+    cp "$PATCH" "$PATCH.bak-jev-uninstall-$(date +%Y%m%d%H%M%S)"
+    awk -v n="$NAME" 'index($0, "# " n ":begin"){skip=1} !skip{print} index($0, "# " n ":end"){skip=0}' "$PATCH" > "$PATCH.tmp"
+    mv "$PATCH.tmp" "$PATCH"
+    echo "patch entry ($NAME) removed from $PATCH"
+  fi
+  DEST=$PDIR/plugins/$NAME
+  case $DEST in
+    */plugins/david-plugin|*/plugins/jev-orchestrator) if [ -d "$DEST" ]; then rm -rf "$DEST"; echo "removed $DEST"; fi ;;
+  esac
+done
 
 # The LaunchAgent is one per user, so only remove it when it runs THIS DSH_HOME's script:
 # a test run against a temp DSH_HOME once removed the real job.

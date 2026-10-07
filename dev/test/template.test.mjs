@@ -32,7 +32,7 @@ test("skeleton loads, registers one tool, and the tool runs", async () => {
 });
 
 test("the template's patch snippet and the shipped patch use the same insert form", () => {
-  const shipped = readFileSync(new URL("../../patch/jev-orchestrator.patch.yml", import.meta.url), "utf8");
-  assert.match(shipped, /- insert:\s*\n\s+- id: jev-orchestrator\s*\n\s+name: \.\/plugins\/jev-orchestrator\/index\.js/);
+  const shipped = readFileSync(new URL("../../patch/david-plugin.patch.yml", import.meta.url), "utf8");
+  assert.match(shipped, /- insert:\s*\n\s+- id: david-plugin\s*\n\s+name: \.\/plugins\/david-plugin\/index\.js/);
   assert.match(md, /- insert:\s*\n\s+- id: my-plugin\s*\n\s+name: \.\/plugins\/my-plugin\/index\.js/);
 });

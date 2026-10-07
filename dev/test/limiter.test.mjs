@@ -4,11 +4,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildTool, newLimiter } from "../../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { Limiter } from "../../plugin/jev-orchestrator/lib/limiter.js";
-import { formatTrace, runPipeline } from "../../plugin/jev-orchestrator/lib/pipeline.js";
+import { buildTool, newLimiter } from "../../plugin/david-plugin/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { Limiter } from "../../plugin/david-plugin/lib/limiter.js";
+import { formatTrace, runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
 const tick = () => new Promise((r) => setImmediate(r));

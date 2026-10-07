@@ -1,4 +1,4 @@
-// jev-orchestrator: one tool, `jev_run`, that runs a coding task through
+// david-plugin: one tool, `jev_run`, that runs a coding task through
 // cost-aware roles. Cursor workers do the work; Codex plans and researches;
 // DeepSeek reviews only the diffs that need it; Laya (local, free) answers the
 // yes/no questions. See README.md and ../../PLUGIN-TEMPLATE.md.

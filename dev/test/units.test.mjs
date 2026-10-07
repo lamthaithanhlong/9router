@@ -5,13 +5,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { capDiff, getChanges, parseNumstat, runTests } from "../../plugin/jev-orchestrator/lib/changes.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { gate2Triggers, globToRegExp, parseVerdict } from "../../plugin/jev-orchestrator/lib/gates.js";
-import { createLaya, looksEnglish } from "../../plugin/jev-orchestrator/lib/laya.js";
-import { RouteHealth } from "../../plugin/jev-orchestrator/lib/health.js";
-import { resolveRole } from "../../plugin/jev-orchestrator/lib/roles.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { capDiff, getChanges, parseNumstat, runTests } from "../../plugin/david-plugin/lib/changes.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { gate2Triggers, globToRegExp, parseVerdict } from "../../plugin/david-plugin/lib/gates.js";
+import { createLaya, looksEnglish } from "../../plugin/david-plugin/lib/laya.js";
+import { RouteHealth } from "../../plugin/david-plugin/lib/health.js";
+import { resolveRole } from "../../plugin/david-plugin/lib/roles.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
 const ledgerAt = (day = "2026-10-06") => {

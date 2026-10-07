@@ -1,19 +1,19 @@
 # INSTALL: dành cho agent trong DeepSeek Harness
 
-Bạn vừa nhận gói này (zip đã giải nén, hoặc còn là file `.zip`). Việc của bạn: cài plugin `jev-orchestrator` vào profile `desktop` của Harness trên máy này, kiểm tra, rồi báo lại người dùng. Không cần hỏi lại từng bước; làm hết các bước dưới đây theo thứ tự.
+Bạn vừa nhận gói này (zip đã giải nén, hoặc còn là file `.zip`). Việc của bạn: cài plugin `david-plugin` vào profile `desktop` của Harness trên máy này, kiểm tra, rồi báo lại người dùng. Không cần hỏi lại từng bước; làm hết các bước dưới đây theo thứ tự.
 
 Plugin thêm một tool tên `jev_run`: chạy một việc code qua các vai theo chi phí. Cursor (`cursor-workers`) làm việc, Codex (`codex-head`) lập kế hoạch/research khi đáng quota, DeepSeek (`deepseek-v4.1-flash`) chỉ review diff rủi ro, Laya (local, miễn phí) chỉ quyết một việc: tác vụ tiếng Anh có cần plan không. Nó không quyết review (đã đo: không phân biệt được diff rủi ro), nên review do luật cứng gọi.
 
 ## Quy tắc khi cài
 
-- Chỉ được đổi: thư mục `~/.dsh/profiles/desktop/plugins/jev-orchestrator`, **một khối có đánh dấu** cuối `~/.dsh/profiles/desktop/cordis.patch.yml` (script tự sao lưu trước), `~/.dsh/PLUGIN-TEMPLATE.md`.
+- Chỉ được đổi: thư mục `~/.dsh/profiles/desktop/plugins/david-plugin`, **một khối có đánh dấu** cuối `~/.dsh/profiles/desktop/cordis.patch.yml` (script tự sao lưu trước), `~/.dsh/PLUGIN-TEMPLATE.md`.
 - Không sửa, không xoá entry nào khác trong `cordis.patch.yml`. Không đọc hay in nội dung `~/.dsh/.credentials.yaml`, không in khoá API.
 - Không tự khởi động lại Harness: bạn đang chạy bên trong nó. Nhờ người dùng làm.
 - Không tải gì từ mạng. Gói này tự đủ.
 
 ## Các bước
 
-1. Nếu bạn chỉ có file `.zip`: giải nén vào một thư mục tạm, ví dụ `unzip -q jev-orchestrator-plugin.zip -d /tmp/jev-install && cd /tmp/jev-install/jev-orchestrator-plugin`. Nếu đã giải nén thì `cd` vào thư mục chứa file `install.sh`.
+1. Nếu bạn chỉ có file `.zip`: giải nén vào một thư mục tạm, ví dụ `unzip -q david-plugin.zip -d /tmp/jev-install && cd /tmp/jev-install/david-plugin`. Nếu đã giải nén thì `cd` vào thư mục chứa file `install.sh`.
 
 2. Chạy:
 
@@ -24,7 +24,7 @@ Plugin thêm một tool tên `jev_run`: chạy một việc code qua các vai th
    `--keepalive` cài một LaunchAgent chạy mỗi phút để giữ Laya luôn bật (người dùng đã yêu cầu). Bỏ cờ này nếu họ đổi ý.
 
 3. Đọc kết quả. Phải thấy cả ba dòng:
-   - `plugin copied to …/plugins/jev-orchestrator`
+   - `plugin copied to …/plugins/david-plugin`
    - `patch entry appended …` (hoặc `already present` nếu cài lại)
    - `OK: the Harness accepts the patch entry`
 
@@ -37,18 +37,18 @@ Plugin thêm một tool tên `jev_run`: chạy một việc code qua các vai th
    - Có: gọi thử một lần cho việc nhỏ trong một thư mục git thử (ví dụ tạo repo tạm, `task: "thêm file hello.txt chứa chữ hi"`, `cwd` là repo đó, `plan: "no"`). Kết quả kỳ vọng: báo cáo `jev_run: done`, chỉ một agent Cursor chạy, không có review.
    - Không có: kiểm tra Harness có provider subagent tên `spawn` không (entry `subagent-spawn-in-process`). Plugin chỉ gắn tool khi provider đó xuất hiện. Báo người dùng kết quả; đừng sửa cấu hình ngoài khối đã thêm.
 
-6. Cho người dùng biết cách xem plugin đã chạy những ai: mục `Who ran:` ở đầu báo cáo của `jev_run`, và lệnh `node ~/.dsh/profiles/desktop/plugins/jev-orchestrator/who.mjs` (xem thêm `~/.dsh/PLUGIN-TEMPLATE.md` §11.7).
+6. Cho người dùng biết cách xem plugin đã chạy những ai: mục `Who ran:` ở đầu báo cáo của `jev_run`, và lệnh `node ~/.dsh/profiles/desktop/plugins/david-plugin/who.mjs` (xem thêm `~/.dsh/PLUGIN-TEMPLATE.md` §11.7).
 
-7. Báo cáo ngắn cho người dùng: đã cài gì, kết quả bước 3, kết quả bước 5, và nhắc rằng con số ngân sách (Codex 40 lượt/ngày, DeepSeek 300.000 token/ngày) là số giả định, sửa trong `config:` của entry `jev-orchestrator` ở `cordis.patch.yml`.
+7. Báo cáo ngắn cho người dùng: đã cài gì, kết quả bước 3, kết quả bước 5, và nhắc rằng con số ngân sách (Codex 40 lượt/ngày, DeepSeek 300.000 token/ngày) là số giả định, sửa trong `config:` của entry `david-plugin` ở `cordis.patch.yml`.
 
 ## Chỉnh cấu hình
 
-Mọi giá trị mặc định nằm ở `plugin/jev-orchestrator/lib/config.js`. Muốn đổi, ghi vào `config:` của entry (chỉ ghi phần đổi), ví dụ:
+Mọi giá trị mặc định nằm ở `plugin/david-plugin/lib/config.js`. Muốn đổi, ghi vào `config:` của entry (chỉ ghi phần đổi), ví dụ:
 
 ```yaml
 - insert:
-    - id: jev-orchestrator
-      name: ./plugins/jev-orchestrator/index.js
+    - id: david-plugin
+      name: ./plugins/david-plugin/index.js
       config:
         budgets:
           codex: { daily: 20 }
@@ -63,7 +63,7 @@ Rồi khởi động lại Harness.
 
 ## Version
 
-Bản này ghi trong `plugin/jev-orchestrator/package.json` và `CHANGELOG.md`. `install.sh` in `version: <cũ> -> <mới>`; khi báo cáo cho người dùng, nêu số version đã cài. Harness chỉ chạy bản mới sau khi khởi động lại; dòng `Plugin: jev-orchestrator <version>` ở cuối báo cáo `jev_run` cho biết bản nào đang chạy thật.
+Bản này ghi trong `plugin/david-plugin/package.json` và `CHANGELOG.md`. `install.sh` in `version: <cũ> -> <mới>`; khi báo cáo cho người dùng, nêu số version đã cài. Harness chỉ chạy bản mới sau khi khởi động lại; dòng `Plugin: david-plugin <version>` ở cuối báo cáo `jev_run` cho biết bản nào đang chạy thật.
 
 ## Gỡ
 

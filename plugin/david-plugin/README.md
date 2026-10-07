@@ -1,4 +1,4 @@
-# jev-orchestrator
+# david plugin
 
 DeepSeek Harness plugin. One tool, `jev_run`, runs a coding task through cost-aware roles.
 

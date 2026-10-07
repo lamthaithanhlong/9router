@@ -6,9 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildTool, denyFor } from "../../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
+import { buildTool, denyFor } from "../../plugin/david-plugin/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
 
@@ -51,7 +51,7 @@ test("who.mjs prints output even when run through a symlinked path (macOS /tmp)"
   const dir = tmp();
   const real = join(dir, "real");
   mkdirSync(real);
-  const src = fileURLToPath(new URL("../../plugin/jev-orchestrator/who.mjs", import.meta.url));
+  const src = fileURLToPath(new URL("../../plugin/david-plugin/who.mjs", import.meta.url));
   writeFileSync(join(real, "who.mjs"), execFileSync("cat", [src], { encoding: "utf8" }));
   symlinkSync(real, join(dir, "link"));
   const log = join(dir, "runs.jsonl");

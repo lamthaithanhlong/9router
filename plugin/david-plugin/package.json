@@ -1,6 +1,6 @@
 {
-  "name": "jev-orchestrator",
-  "version": "0.7.7",
+  "name": "david-plugin",
+  "version": "0.8.0",
   "description": "Cost-aware coding pipeline for DeepSeek Harness: Cursor works, Codex researches, DeepSeek reviews only risky diffs, Laya decides.",
   "private": true,
   "type": "module",

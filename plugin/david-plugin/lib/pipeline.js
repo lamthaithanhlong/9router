@@ -439,6 +439,6 @@ export function formatReport(outcome, changes, version, cost, uiUrl = null) {
   }
   if (changes?.files?.length) lines.push("", "Changed files:", ...changes.files.map((f) => `- ${f.path} (+${f.added} -${f.removed})`));
   if (outcome.status === "awaiting_human") lines.push("", "A human decision is needed; nothing was merged.");
-  if (version) lines.push("", `Plugin: jev-orchestrator ${version}`);
+  if (version) lines.push("", `Plugin: david plugin ${version}`);
   return lines.join("\n");
 }

@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createProbe } from "../../plugin/jev-orchestrator/lib/probe.js";
-import { resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
+import { createProbe } from "../../plugin/david-plugin/lib/probe.js";
+import { resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });

@@ -4,10 +4,10 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test as nodeTest } from "node:test";
-import { buildTool } from "../../plugin/jev-orchestrator/index.js";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { createQueue, idSource, taskId } from "../../plugin/jev-orchestrator/lib/queue.js";
+import { buildTool } from "../../plugin/david-plugin/index.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { createQueue, idSource, taskId } from "../../plugin/david-plugin/lib/queue.js";
 
 // A queue bug usually shows up as waiting forever, so every test here has a deadline and fails instead of hanging.
 const test = (name, fn) => nodeTest(name, { timeout: 15_000 }, fn);

@@ -16,7 +16,7 @@ test("--once prints the last 20 calls, newest data, with a date for old rows", (
   const ins = db.prepare("insert into usageHistory (provider, model, promptTokens, completionTokens, cost, timestamp) values (?,?,?,?,?,?)");
   for (let i = 1; i <= 60; i++) ins.run("p", "m" + i, i, 1, 0.001, `2026-10-05T10:00:${String(i % 60).padStart(2, "0")}.000Z`);
   db.close();
-  const out = execFileSync("node", ["plugin/jev-orchestrator/watch.mjs", "--once"], {
+  const out = execFileSync("node", ["plugin/david-plugin/watch.mjs", "--once"], {
     encoding: "utf8",
     env: { ...process.env, JEV_9ROUTER_DB: file, HOME: dir },
   });

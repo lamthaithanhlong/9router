@@ -1,0 +1,6 @@
+# david-plugin:begin
+- insert:
+    - id: david-plugin
+      name: ./plugins/david-plugin/index.js
+      config: {}
+# david-plugin:end

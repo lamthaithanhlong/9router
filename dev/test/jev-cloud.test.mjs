@@ -6,11 +6,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { describeMissingSecret, readSecretFile, resolveSecret } from "../../plugin/jev-orchestrator/lib/keys.js";
-import { createLaya, isLoopback } from "../../plugin/jev-orchestrator/lib/laya.js";
-import { runPipeline } from "../../plugin/jev-orchestrator/lib/pipeline.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { describeMissingSecret, readSecretFile, resolveSecret } from "../../plugin/david-plugin/lib/keys.js";
+import { createLaya, isLoopback } from "../../plugin/david-plugin/lib/laya.js";
+import { runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
 const SECRET = "sekret-value-do-not-log";
 
@@ -106,7 +106,7 @@ test("laya: a failing cloud URL never starts the local server; a failing loopbac
 });
 
 test("api: the key may also come from a file, named (never valued) in the error", async () => {
-  const { createApiSpawn } = await import("../../plugin/jev-orchestrator/lib/api.js");
+  const { createApiSpawn } = await import("../../plugin/david-plugin/lib/api.js");
   const readFile = () => `${SECRET}\n`;
   let seen;
   const spawn = createApiSpawn(resolveConfig(), {
@@ -219,7 +219,7 @@ test("laya: a hosted 429 marks the route spent for the day and stops asking it",
 });
 
 test("laya: isQuotaError only fires on quota-shaped failures", async () => {
-  const { isQuotaError } = await import("../../plugin/jev-orchestrator/lib/laya.js");
+  const { isQuotaError } = await import("../../plugin/david-plugin/lib/laya.js");
   assert.equal(isQuotaError(429, ""), true);
   assert.equal(isQuotaError(402, ""), true);
   assert.equal(isQuotaError(403, '{"error":"insufficient balance"}'), true);

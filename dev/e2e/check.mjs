@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
-const VERSION = JSON.parse(readFileSync(new URL("../../plugin/jev-orchestrator/package.json", import.meta.url), "utf8")).version;
+const VERSION = JSON.parse(readFileSync(new URL("../../plugin/david-plugin/package.json", import.meta.url), "utf8")).version;
 const [scen, dir] = process.argv.slice(2);
 const out = readFileSync(`${dir}/head-${scen}.out`, "utf8");
 const reqs = readFileSync(`${dir}/requests-${scen}.jsonl`, "utf8").split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
@@ -16,7 +16,7 @@ const readOnly = (model) => { for (const set of toolsOf(model)) for (const t of 
 const ledger = () => JSON.parse(readFileSync(`${dir}/jev-ledger.json`, "utf8")).used;
 
 assert.ok(withTools.some((r) => r.toolNames.includes("jev_run")), "jev_run was never offered to the head agent: plugin not loaded");
-assert.ok(out.includes(`Plugin: jev-orchestrator ${VERSION}`), `report has no "Plugin: jev-orchestrator ${VERSION}" footer`);
+assert.ok(out.includes(`Plugin: david plugin ${VERSION}`), `report has no "Plugin: david plugin ${VERSION}" footer`);
 noSpawners("cursor-workers");
 noSpawners("backup-free");
 

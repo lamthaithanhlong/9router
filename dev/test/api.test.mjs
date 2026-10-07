@@ -6,9 +6,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ledger } from "../../plugin/jev-orchestrator/lib/budget.js";
-import { DEFAULTS, resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
-import { runPipeline } from "../../plugin/jev-orchestrator/lib/pipeline.js";
+import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
+import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
+import { runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
 const KEY_ENV = "JEV_API_TEST_KEY";
 const KEY_VALUE = "test-key-value-0123456789";
@@ -30,7 +30,7 @@ const response = (body, status = 200) => ({
   async text() { return typeof body === "string" ? body : JSON.stringify(body); },
 });
 
-const load = () => import("../../plugin/jev-orchestrator/lib/api.js");
+const load = () => import("../../plugin/david-plugin/lib/api.js");
 
 test("happy path: text and usage are mapped from a string content", async () => {
   process.env[KEY_ENV] = KEY_VALUE;
