@@ -13,7 +13,22 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+### Added
+- **The FLOW graph shows direction and what each running stage is doing right now** (`lib/ui/index.html`). Every
+  edge ends in an arrowhead (blue and thicker while a stage runs, green once travelled, a hop through a skipped
+  stage counts as travelled), and a running node carries a live line with the child's latest action
+  (`gọi bash …`, `nghĩ …`, `kết edit ok …`) and a blinking cursor.
+
 ### Fixed
+- **The dashboard froze on the first snapshot: stage cards, the FLOW graph and the cost block only changed after a
+  page reload.** The server sent one `snapshot` on connect and afterwards only single `step` lines, which extend
+  the log and nothing else. It now pushes a fresh snapshot whenever steps arrive (and every ~5 s while someone is
+  watching), and the page asks `/state` itself when no snapshot has come for a few seconds, so it also follows a
+  server that has not been restarted onto this version.
+- **The animated edges never travelled.** The page rebuilt the whole SVG once a second, which restarted every
+  moving dot from zero before it got anywhere. The graph is redrawn only when an edge actually changes.
+- The snapshot re-parsed the whole steps file on every call; parsed lines are now kept until the file's size or
+  mtime moves (a line can carry 1200 characters of detail since 0.7.7).
 - **A cancelled or crashed run showed RUNNING on the dashboard until the next run replaced it.** Only a successful
   run wrote a closing step line, so the head node pulsed and the tag read RUNNING long after the worker said
   "cancelled". A failed run now writes `run ended: <error>` (status `error`), and the dashboard also closes any run

@@ -125,7 +125,15 @@
           animation: fbub 3.6s ease-out forwards; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fbub::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -4px; border: 4px solid transparent; border-top-color: #1f6feb; }
 
+  .fn .fa { margin-top: 4px; font: 10px/1.35 ui-monospace, Menlo, monospace; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fn .fa:empty { display: none; }
+  .fn .fa .ak { display: inline-block; margin-right: 4px; padding: 0 4px; border-radius: 3px; font-size: 8.5px; font-weight: 700; background: #30363d; color: #8b949e; }
+  .fn .fa .ak.k-nghi { background: #2d1f4d; color: #bc8cff; } .fn .fa .ak.k-noi { background: #12301e; color: #56d364; }
+  .fn .fa .ak.k-goi { background: #0d2a4a; color: #58a6ff; }  .fn .fa .ak.k-ket { background: #3a2a0a; color: #e3b341; }
+  .fn .fa .ak.k-retry { background: #4d3a12; color: #f0883e; } .fn .fa .ak.k-loi { background: #4d1a1a; color: #f85149; }
+  .fn.running .fa::after { content: "▍"; margin-left: 1px; color: #58a6ff; animation: fblink 1s steps(2, start) infinite; }
   .fedge { fill: none; stroke: #2d333b; stroke-width: 1.5; transition: stroke .4s; }
+  .fedge.live { stroke-width: 2.4; }
   .fedge.done { stroke: #238636; }
   .fedge.live { stroke: #388bfd; stroke-dasharray: 6 5; animation: fdash .7s linear infinite; }
   .fedge.mgr { stroke: #9e6a03; stroke-dasharray: 3 5; opacity: .55; }
@@ -136,6 +144,7 @@
   @keyframes fpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(56,139,253,.55); } 50% { box-shadow: 0 0 0 7px rgba(56,139,253,0); } }
   @keyframes fpulse-y { 0%,100% { box-shadow: 0 0 0 0 rgba(227,179,65,.5); } 50% { box-shadow: 0 0 0 7px rgba(227,179,65,0); } }
   @keyframes fslide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  @keyframes fblink { to { visibility: hidden; } }
   @keyframes fdash { to { stroke-dashoffset: -22; } }
   @keyframes fburst { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.18); } }
   @keyframes fbub { 0% { opacity: 0; transform: translate(-50%, 6px); } 8% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
@@ -295,6 +304,8 @@ const COLS = [
 const SVGNS = "http://www.w3.org/2000/svg";
 let flowSig = "";
 const BUBBLE_T = new Map();
+const ACT = new Map();       // `${run}|${label}` -> { kind, text }: the last thing each running child did
+let lastEdges = "";
 
 function flowModel() {
   const run = state?.run;
@@ -339,7 +350,7 @@ const STATUS_TXT = { running: "● RUN", done: "XONG", failed: "HỎNG", pending
 function nodeEl(n) {
   const el = document.createElement("div");
   el.dataset.k = n.key;
-  el.innerHTML = `<span class="fs"></span><div class="fr"></div><div class="fl"></div><div class="fm"></div><div class="ft"><span class="a"></span><b class="b"></b></div><div class="fb"><i></i></div>`;
+  el.innerHTML = `<span class="fs"></span><div class="fr"></div><div class="fl"></div><div class="fm"></div><div class="fa"></div><div class="ft"><span class="a"></span><b class="b"></b></div><div class="fb"><i></i></div>`;
   return el;
 }
 
@@ -353,6 +364,19 @@ function paintNode(el, n) {
   const t = n.t0 ? (n.st === "running" ? `${((Date.now() - Date.parse(n.t0)) / 1000).toFixed(0)}s` : n.t1 ? `${((Date.parse(n.t1) - Date.parse(n.t0)) / 1000).toFixed(1)}s` : "") : "";
   el.querySelector(".a").textContent = n.kind === "mgr" ? `${n.turns} step` : t;
   el.querySelector(".b").textContent = n.usd != null ? money(n.usd) : "";
+  const fa = el.querySelector(".fa");
+  const act = st === "running" && state?.run ? ACT.get(`${state.run.id}|${n.key}`) : null;
+  const sig = act ? `${act.kind}|${act.text}` : "";
+  if (fa.dataset.sig !== sig) {
+    fa.dataset.sig = sig;
+    fa.textContent = "";
+    if (act) {
+      const k = document.createElement("span");
+      k.className = `ak ${KIND_CLS[act.kind] || ""}`;
+      k.textContent = act.kind || "";
+      fa.append(k, String(act.text || "").replace(/\s+/g, " ").slice(0, 60));
+    }
+  }
   el.title = n.text || n.label;
 }
 
@@ -393,6 +417,9 @@ function drawEdges(m) {
   const get = (k) => document.querySelector(`#fstage [data-k="${k}"]`);
   const order = COLS.map((c) => c.id);
   let out = "";
+  const HEAD = { live: "#58a6ff", done: "#238636", mgr: "#9e6a03", mgrlive: "#e3b341", idle: "#3d444d" };
+  const defs = `<defs>${Object.entries(HEAD).map(([k, c]) => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`).join("")}</defs>`;
+  const r = (v) => Math.round(v);
   const edge = (a, b, cls, mgr) => {
     const ea = get(a.key), eb = get(b.key);
     if (!ea || !eb) return;
@@ -400,26 +427,31 @@ function drawEdges(m) {
     if (mgr) {
       p1 = centre(ea, "t", box); p2 = centre(eb, "b", box);
       const my = (p1[1] + p2[1]) / 2;
-      d = `M${p1[0]},${p1[1]} C${p1[0]},${my} ${p2[0]},${my} ${p2[0]},${p2[1]}`;
+      d = `M${r(p1[0])},${r(p1[1])} C${r(p1[0])},${r(my)} ${r(p2[0])},${r(my)} ${r(p2[0])},${r(p2[1])}`;
     } else {
       p1 = centre(ea, "r", box); p2 = centre(eb, "l", box);
       const mx = (p1[0] + p2[0]) / 2;
-      d = `M${p1[0]},${p1[1]} C${mx},${p1[1]} ${mx},${p2[1]} ${p2[0]},${p2[1]}`;
+      d = `M${r(p1[0])},${r(p1[1])} C${r(mx)},${r(p1[1])} ${r(mx)},${r(p2[1])} ${r(p2[0] - 2)},${r(p2[1])}`;
     }
     const id = "e" + out.length;
-    out += `<path id="${id}" class="fedge ${cls}" d="${d}"/>`;
+    const head = mgr ? (cls.includes("live") ? "mgrlive" : "mgr") : cls.includes("live") ? "live" : cls.includes("done") ? "done" : "idle";
+    out += `<path id="${id}" class="fedge ${cls}" d="${d}" marker-end="url(#ah-${head})"/>`;
     if (cls.includes("live")) out += `<circle class="fdot${mgr ? " mgr" : ""}" r="3.2"><animateMotion dur="${mgr ? 1.4 : 1.1}s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`;
   };
   for (let i = 0; i < order.length - 1; i++) {
     const A = byCol(order[i]), B = byCol(order[i + 1]);
     for (const a of A) for (const b of B) {
       const live = b.st === "running" && (a.st === "done" || a.st === "running" || a.st === "skipped" || a.ghost);
-      const done = !live && (b.st === "done" || b.st === "failed" || b.st === "hold") && a.st !== "pending";
+      // a hop the run has already passed through (including a stage it skipped) is drawn as travelled
+      const done = !live && (b.st === "done" || b.st === "failed" || b.st === "hold" || b.st === "skipped") && a.st !== "pending";
       edge(a, b, live ? "live" : done ? "done" : "", false);
     }
   }
   for (const v of m.viaNodes) edge(m.mgr, v, "mgr" + (v.st === "running" ? " live" : ""), true);
-  svg.innerHTML = out;
+  // Rebuilding the SVG restarts every travelling dot and dash from zero. This runs every second, so rebuilding
+  // unconditionally meant a dot never got further than the first few pixels: the arrows looked dead.
+  const next = defs + out;
+  if (next !== lastEdges) { lastEdges = next; svg.innerHTML = next; }
 }
 
 function flowPulse(s) {
@@ -463,16 +495,28 @@ $("log").addEventListener("click", (e) => {
 });
 
 const es = new EventSource("/events");
-es.addEventListener("snapshot", (ev) => { state = JSON.parse(ev.data); render(); });
+let lastSnap = Date.now();
+es.addEventListener("snapshot", (ev) => { state = JSON.parse(ev.data); lastSnap = Date.now(); render(); });
 es.addEventListener("step", (ev) => {
   if (!state) return;
   const step = JSON.parse(ev.data);
   state.steps.push(step);
   if (state.steps.length > 600) state.steps = state.steps.slice(-400);
-  renderChips(); renderLog(); flowPulse(step);
+  if (step.child && step.label && step.kind !== "nhịp") ACT.set(`${step.run}|${step.label}`, { kind: step.kind, text: step.text });
+  renderChips(); renderLog(); flowPulse(step); renderFlow();
 });
 es.onerror = () => { $("dot").className = "dot off"; };
 setInterval(() => { if (state?.run?.status === "running") { renderStages(); renderFlow(); } }, 1000);
+// A server older than 0.7.8 sends one snapshot and then only log lines, so the cards and the graph would freeze.
+// If no snapshot has arrived lately, ask for one; a server that does push never reaches this.
+setInterval(async () => {
+  const quiet = Date.now() - lastSnap;
+  if (quiet < (state?.run?.status === "running" ? 3500 : 7000)) return;
+  try {
+    const r = await fetch("/state", { cache: "no-store" });
+    if (r.ok) { state = await r.json(); lastSnap = Date.now(); render(); }
+  } catch { /* the stream's own onerror shows the dot */ }
+}, 2000);
 </script>
 </body>
 </html>

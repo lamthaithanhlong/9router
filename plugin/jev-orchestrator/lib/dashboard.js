@@ -29,8 +29,21 @@ function parseJsonl(text, limit) {
   return limit && out.length > limit ? out.slice(-limit) : out;
 }
 
+// The snapshot is rebuilt about once a second while a run is live, and the steps file carries up to 1200
+// characters of detail per line: re-parsing it when nothing was appended is pure waste, so the parsed lines
+// are kept per file until its size or mtime moves.
+const parsed = new Map();
 function readJsonl(file, limit) {
-  try { return parseJsonl(readFileSync(file, "utf8"), limit); } catch { return []; }
+  try {
+    const st = statSync(file);
+    const key = `${st.size}:${st.mtimeMs}`;
+    let hit = parsed.get(file);
+    if (!hit || hit.key !== key) {
+      hit = { key, all: parseJsonl(readFileSync(file, "utf8"), 0) };
+      parsed.set(file, hit);
+    }
+    return limit > 0 ? hit.all.slice(-limit) : hit.all;
+  } catch { return []; }
 }
 
 function readJson(file) {
@@ -171,6 +184,7 @@ export function createDashboard({ cfg, ledger, version, log = () => {}, host = "
     if (!clients.size) return;
     beats += 1;
     if (beats % 15 === 0) for (const res of clients) { try { res.write(": ping\n\n"); } catch { /* gone */ } }
+    if (beats % 5 === 0) pushSnapshot();
     let size = 0;
     try { size = statSync(stepsFile).size; } catch { return; }
     if (size < offset) { offset = 0; carry = ""; } // rotated or truncated
@@ -180,11 +194,30 @@ export function createDashboard({ cfg, ledger, version, log = () => {}, host = "
     offset = size; // byte offset, but the feed is ASCII-safe JSON; a multi-byte split only costs one re-read
     const parts = (carry + text).split("\n");
     carry = parts.pop() ?? "";
+    let fresh = 0;
     for (const line of parts) {
       if (!line.trim()) continue;
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
+      fresh += 1;
       for (const res of clients) frame(res, "step", entry);
+    }
+    if (fresh) pushSnapshot();
+  }
+
+  // A `step` frame only extends the log. The cards, the FLOW graph and the cost block are derived from the whole
+  // feed, so without this the page showed a run as RUNNING (or a stage as waiting) until it was reloaded.
+  let pushing = false;
+  async function pushSnapshot() {
+    if (pushing || !clients.size) return;
+    pushing = true;
+    try {
+      const snap = await snapshot();
+      for (const res of clients) frame(res, "snapshot", snap);
+    } catch (err) {
+      log(`dashboard: snapshot push failed: ${err.message ?? err}`);
+    } finally {
+      pushing = false;
     }
   }
 

@@ -2,7 +2,7 @@ import { SANDBOX_HOME } from "./_sandbox.mjs";
 // The live dashboard: what it derives from the step feed, and that the HTTP surface answers and
 // stops cleanly. It reads files only - a test that made it call a model would be a bug in the test.
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -139,6 +139,46 @@ test("dashboard: /state and / answer, /events opens an SSE frame, and it stops c
     await reader.cancel();
 
     assert.equal((await fetch(`${base}/nope`)).status, 404);
+  } finally {
+    dash.close();
+  }
+});
+
+test("dashboard: a step appended while a page is connected also refreshes the snapshot (cards and FLOW follow the run)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jev-dash-live-"));
+  const stepsFile = join(dir, "steps.jsonl");
+  writeFileSync(stepsFile, [step({ text: "run started" }), step({ text: "worker-1 started on deepseek", role: "worker", label: "worker-1", route: "deepseek" })].join("\n") + "\n");
+  writeFileSync(join(dir, "runs.jsonl"), "");
+  const pageFile = join(dir, "index.html");
+  writeFileSync(pageFile, "<html></html>");
+  const cfg = { stepsFile, runLog: join(dir, "runs.jsonl"), ledgerFile: join(dir, "l.json"), budgets: {}, routes: {}, cost: { dbFile: join(dir, "none.sqlite") } };
+  const dash = createDashboard({ cfg, ledger: { load: () => ({ day: "d", used: {} }) }, version: "t", port: 0, pageFile, pollMs: 25, log: () => {} });
+  try {
+    const base = await until(() => dash.url());
+    const reader = (await fetch(`${base}/events`)).body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    const snapshots = [];
+    const pump = (async () => {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buf += dec.decode(value);
+        let i;
+        while ((i = buf.indexOf("\n\n")) !== -1) {
+          const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+          const m = /^event: snapshot\ndata: (.*)$/m.exec(frame);
+          if (m) snapshots.push(JSON.parse(m[1]));
+        }
+      }
+    })();
+    await until(() => snapshots.length >= 1);
+    assert.equal(snapshots[0].run.stages[0].status, "running");
+    appendFileSync(stepsFile, [step({ text: "worker-1 done in 3.0s, $0.0000", role: "worker", label: "worker-1", route: "deepseek" }), step({ text: "run done: $0.0000, 1 calls", status: "done" })].join("\n") + "\n");
+    const last = await until(() => snapshots.find((x) => x.run?.status === "done"), 4000);
+    assert.equal(last.run.stages[0].status, "done", "the stage card changed without a reload");
+    await reader.cancel();
+    await pump.catch(() => {});
   } finally {
     dash.close();
   }
