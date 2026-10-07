@@ -181,7 +181,13 @@ export function createDashboard({ cfg, ledger, version, log = () => {}, host = "
   }
 
   function tick() {
-    if (!clients.size) return;
+    if (!clients.size) {
+      // Nobody is watching: lines written now are history by the time a page connects, and that page gets them in its
+      // snapshot. Standing still at offset 0 made the FIRST page that connected receive the whole file again as "new"
+      // steps (every log row twice, a bubble for every line).
+      try { offset = statSync(stepsFile).size; carry = ""; } catch { /* no file yet */ }
+      return;
+    }
     beats += 1;
     if (beats % 15 === 0) for (const res of clients) { try { res.write(": ping\n\n"); } catch { /* gone */ } }
     if (beats % 5 === 0) pushSnapshot();
@@ -272,7 +278,7 @@ export function createDashboard({ cfg, ledger, version, log = () => {}, host = "
     listening = true;
     const addr = server.address();
     url = `http://${host}:${addr.port}`;
-    offset = 0;
+    try { offset = statSync(stepsFile).size; } catch { offset = 0; }
     carry = "";
     timer = setInterval(tick, pollMs);
     timer.unref?.();

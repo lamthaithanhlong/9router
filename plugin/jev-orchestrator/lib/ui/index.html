@@ -14,8 +14,10 @@
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3fb950; vertical-align: middle; }
   .dot.off { background: #6e7681; }
 
-  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 14px; align-items: start; }
-  .cards { display: grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap: 10px; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(480px, 46%); gap: 14px; align-items: start; }
+  .wrap.big { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1100px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
   .col { display: flex; flex-direction: column; gap: 10px; }
 
   .box { border: 1px solid #2d333b; border-radius: 10px; background: #161b22; overflow: hidden; }
@@ -49,14 +51,14 @@
   .bar { height: 3px; background: #21262d; border-radius: 3px; margin-top: 6px; overflow: hidden; }
   .bar i { display: block; height: 100%; background: #1f6feb; }
 
-  table.log { width: 100%; border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; }
-  table.log td { padding: 2px 7px; border-bottom: 1px solid #1c2128; vertical-align: top; }
+  table.log { width: 100%; border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.45; }
+  table.log td { padding: 3px 8px; border-bottom: 1px solid #1c2128; vertical-align: top; }
   table.log td.t { color: #6e7681; white-space: nowrap; }
   table.log td.w { white-space: nowrap; }
   .r-codex { color: #56d364; } .r-deepseek { color: #a371f7; } .r-cursor { color: #58a6ff; }
   .r-backup { color: #d29922; } .r-laya { color: #e3b341; } .r-manager { color: #e3b341; }
-  .kd { display: inline-block; min-width: 34px; text-align: center; margin-right: 6px; padding: 0 5px; border-radius: 4px;
-        font-size: 9.5px; font-weight: 700; letter-spacing: .3px; vertical-align: 1px; background: #30363d; color: #8b949e; }
+  .kd { display: inline-block; min-width: 40px; text-align: center; margin-right: 7px; padding: 0 6px; border-radius: 4px;
+        font-size: 10.5px; font-weight: 700; letter-spacing: .3px; vertical-align: 1px; background: #30363d; color: #8b949e; }
   .kd.k-nghi { background: #2d1f4d; color: #bc8cff; }  .kd.k-noi { background: #12301e; color: #56d364; }
   .kd.k-goi { background: #0d2a4a; color: #58a6ff; }   .kd.k-ket { background: #3a2a0a; color: #e3b341; }
   .kd.k-retry { background: #4d3a12; color: #f0883e; } .kd.k-loi { background: #4d1a1a; color: #f85149; }
@@ -66,8 +68,9 @@
   table.log tr.has .mk { color: #6e7681; margin-left: 4px; font-size: 9px; }
   table.log tr.dt td { padding: 0 7px 6px 7px; border-bottom: 1px solid #1c2128; }
   table.log tr.dt pre { margin: 0; padding: 6px 8px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
-        white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; color: #adbac7; font: 10.5px/1.45 ui-monospace, Menlo, monospace; }
-  .logwrap { max-height: 420px; overflow: auto; }
+        white-space: pre-wrap; word-break: break-word; max-height: 380px; overflow: auto; color: #adbac7; font: 11.5px/1.5 ui-monospace, Menlo, monospace; }
+  .logwrap { max-height: 70vh; min-height: 300px; overflow: auto; }
+  .wrap.big .logwrap { max-height: 82vh; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 9px; border-bottom: 1px solid #2d333b; }
   .chip { font-size: 10.5px; padding: 2px 7px; border-radius: 20px; border: 1px solid #30363d; color: #8b949e;
           cursor: pointer; user-select: none; background: transparent; }
@@ -90,7 +93,6 @@
   .fcols { position: relative; z-index: 2; display: flex; justify-content: space-between; gap: 26px; align-items: stretch; }
   .fcol { flex: 1 1 0; min-width: 96px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
   .fcap { text-align: center; font-size: 9px; letter-spacing: .8px; text-transform: uppercase; color: #6e7681; margin-bottom: 2px; }
-  .fmgr { position: relative; z-index: 2; display: flex; justify-content: center; margin-top: 30px; }
   .fedges { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
 
   .fn { position: relative; padding: 7px 9px; border-radius: 10px; border: 1px solid #30363d; background: #161b22;
@@ -116,9 +118,7 @@
   .fn.hold .fs { background: #4d3a12; color: #e3b341; }
   .fn.kind-head { border-color: #6e40c9; background: #1a1230; }
   .fn.kind-head .fr { color: #a371f7; }
-  .fn.kind-mgr { border-color: #9e6a03; background: #1f1808; min-width: 260px; text-align: center; }
-  .fn.kind-mgr.running { border-color: #e3b341; background: #2a200a; animation: fpulse-y 1.6s ease-in-out infinite; }
-  .fn.kind-mgr .ft { justify-content: center; gap: 12px; }
+  .fn.kind-seat .fr { color: #e3b341; }
   .fn.burst::after { content: ""; position: absolute; inset: -2px; border-radius: 12px; border: 2px solid #58a6ff; animation: fburst .8s ease-out forwards; pointer-events: none; }
   .fbub { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; max-width: 230px; width: max-content;
           padding: 3px 8px; border-radius: 7px; font-size: 10px; background: #1f6feb; color: #fff; pointer-events: none;
@@ -160,7 +160,7 @@
 <div class="flow" id="flow">
   <div class="fh">FLOW · luồng chạy thật <span class="tag wait" id="flowtag">idle</span>
     <span class="legend"><span><i style="background:#6e7681"></i>chờ</span><span><i style="background:#1f6feb"></i>đang chạy</span><span><i style="background:#2ea043"></i>xong</span><span><i style="background:#f85149"></i>hỏng</span><span><i style="background:#e3b341"></i>manager</span></span></div>
-  <div class="fstage" id="fstage"><svg class="fedges" id="fedges"></svg><div class="fcols" id="fcols"></div><div class="fmgr" id="fmgr"></div></div>
+  <div class="fstage" id="fstage"><svg class="fedges" id="fedges"></svg><div class="fcols" id="fcols"></div></div>
 </div>
 
 <div class="wrap">
@@ -176,7 +176,7 @@
     </div>
 
     <div class="box" id="logbox">
-      <div class="hd">SESSION LOG <span class="tag run" id="logtag">live</span></div>
+      <div class="hd">SESSION LOG <span style="margin-left:auto;display:flex;gap:6px"><span class="tag wait" id="logbig" style="cursor:pointer;margin:0" title="log chiếm cả chiều ngang">⤢ rộng</span><span class="tag run" id="logtag" style="margin:0">live</span></span></div>
       <div class="chips" id="chips"></div>
       <div class="logwrap"><table class="log" id="log"><tbody></tbody></table></div>
     </div>
@@ -297,8 +297,8 @@ function renderSub() {
 
 /* ---------- FLOW ---------- */
 const COLS = [
-  { id: "head", cap: "Head agent" }, { id: "laya", cap: "Jev · gate" }, { id: "planner", cap: "Planner" },
-  { id: "researcher", cap: "Researchers ‖" }, { id: "worker", cap: "Workers ‖" },
+  { id: "head", cap: "Head agent" }, { id: "laya", cap: "Jev · gate" },
+  { id: "manager", cap: "Manager · plan + research" }, { id: "worker", cap: "Workers ‖" },
   { id: "reviewer", cap: "Reviewer" }, { id: "final_reviewer", cap: "Final review" }, { id: "end", cap: "Kết quả" },
 ];
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -320,29 +320,27 @@ function flowModel() {
   const headSt = !run ? "pending" : runSt === "running" ? "running" : "done";
   add("head", { key: "head", role: "head", label: "jev_run", sub: "CEO / CTO", st: headSt, kind: "head" });
 
-  const layaSteps = (state?.steps ?? []).filter((s) => run && s.run === run.id && s.role === "laya" || s.role === "jev");
+  const layaSteps = (state?.steps ?? []).filter((s) => run && s.run === run.id && (s.role === "laya" || s.role === "jev"));
   const layaSt = !run ? "pending" : layaSteps.length || started ? "done" : "running";
   add("laya", { key: "laya", role: "jev", label: "needs_plan", sub: layaSteps.length ? (layaSteps[layaSteps.length - 1].text || "").slice(0, 28) : "cổng quyết định", st: layaSt });
 
-  for (const col of ["planner", "researcher", "worker", "reviewer", "final_reviewer"]) {
+  // planner and researcher are two jobs of ONE seat: the manager, which rotates codex <-> deepseek-host. They share
+  // a column; a run that used neither shows the seat as idle instead of two stages that look broken.
+  const stageNode = (col, s, kind) => ({ key: s.key, role: s.role, label: s.label, sub: [s.route, s.model].filter(Boolean).join(" / "), st: s.status, via: s.via, turn: s.turn, t0: s.startedAt, t1: s.endedAt, usd: s.usd, text: s.text, ...(kind ? { kind } : {}) });
+  const seat = stages.filter((s) => s.role === "planner" || s.role === "researcher");
+  if (seat.length) for (const s of seat) add("manager", stageNode("manager", s, "seat"));
+  else add("manager", { key: "manager~", role: "manager", label: "planner · researcher", sub: anyWorker || ended ? "không gọi lượt này" : "chờ", st: anyWorker || ended ? "skipped" : "pending", ghost: true, kind: "seat" });
+
+  for (const col of ["worker", "reviewer", "final_reviewer"]) {
     const mine = stages.filter((s) => s.role === col);
-    if (mine.length) {
-      for (const s of mine) add(col, { key: s.key, role: col, label: s.label, sub: [s.route, s.model].filter(Boolean).join(" / "), st: s.status, via: s.via, turn: s.turn, t0: s.startedAt, t1: s.endedAt, usd: s.usd, text: s.text });
-    } else {
-      const skip = (col === "planner" || col === "researcher") ? (anyWorker || ended) : ended;
-      add(col, { key: col + "~", role: col, label: col.replace("_", " "), sub: skip ? "bỏ qua" : "chờ", st: skip ? "skipped" : "pending", ghost: true });
-    }
+    if (mine.length) for (const s of mine) add(col, stageNode(col, s));
+    else add(col, { key: col + "~", role: col, label: col.replace("_", " "), sub: ended ? "bỏ qua" : "chờ", st: ended ? "skipped" : "pending", ghost: true });
   }
 
   const endMap = { running: "pending", idle: "pending", done: "done", error: "failed", awaiting_human: "hold" };
   add("end", { key: "end", role: "end", label: runSt === "awaiting_human" ? "awaiting_human" : runSt === "error" ? "error" : runSt === "done" ? "hoàn tất" : "—", sub: run ? `$${(Number(run.usd) || 0).toFixed(4)}` : "", st: endMap[runSt] || "pending" });
 
-  // manager seat: rotating (codex <-> deepseek-host); shows whoever turned last
-  const viaNodes = nodes.filter((n) => n.via === "manager");
-  const lastVia = viaNodes[viaNodes.length - 1];
-  const mgrRun = viaNodes.some((n) => n.st === "running");
-  const mgrSteps = (state?.steps ?? []).filter((s) => run && s.run === run.id && (s.role === "manager" || s.via === "manager"));
-  return { nodes, viaNodes, mgr: { key: "manager", role: "manager", label: "MANAGER seat", st: mgrRun ? "running" : viaNodes.length ? "done" : "pending", sub: lastVia ? `${lastVia.sub || ""} · turn ${lastVia.turn ?? "?"}` : "ghế xoay vòng · chưa có lượt", turns: mgrSteps.length, kind: "mgr" } };
+  return { nodes };
 }
 
 const STATUS_TXT = { running: "● RUN", done: "XONG", failed: "HỎNG", pending: "CHỜ", skipped: "BỎ QUA", hold: "GIỮ", held: "GIỮ" };
@@ -383,15 +381,13 @@ function paintNode(el, n) {
 function renderFlow() {
   const m = flowModel();
   const cols = $("fcols");
-  const sig = m.nodes.map((n) => n.col + ":" + n.key).join("|") + "#" + m.viaNodes.map((n) => n.key).join(",");
+  const sig = m.nodes.map((n) => n.col + ":" + n.key).join("|");
   if (sig !== flowSig) {
     flowSig = sig;
     cols.innerHTML = COLS.map((c) => `<div class="fcol" data-c="${c.id}"><div class="fcap">${c.cap}</div></div>`).join("");
     for (const n of m.nodes) cols.querySelector(`.fcol[data-c="${n.col}"]`).appendChild(nodeEl(n));
-    $("fmgr").innerHTML = "";
-    $("fmgr").appendChild(nodeEl(m.mgr));
   }
-  for (const n of [...m.nodes, m.mgr]) {
+  for (const n of m.nodes) {
     const el = document.querySelector(`#fstage [data-k="${n.key}"]`);
     if (el) paintNode(el, n);
   }
@@ -417,26 +413,19 @@ function drawEdges(m) {
   const get = (k) => document.querySelector(`#fstage [data-k="${k}"]`);
   const order = COLS.map((c) => c.id);
   let out = "";
-  const HEAD = { live: "#58a6ff", done: "#238636", mgr: "#9e6a03", mgrlive: "#e3b341", idle: "#3d444d" };
+  const HEAD = { live: "#58a6ff", done: "#238636", idle: "#3d444d" };
   const defs = `<defs>${Object.entries(HEAD).map(([k, c]) => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`).join("")}</defs>`;
   const r = (v) => Math.round(v);
-  const edge = (a, b, cls, mgr) => {
+  const edge = (a, b, cls) => {
     const ea = get(a.key), eb = get(b.key);
     if (!ea || !eb) return;
-    let p1, p2, d;
-    if (mgr) {
-      p1 = centre(ea, "t", box); p2 = centre(eb, "b", box);
-      const my = (p1[1] + p2[1]) / 2;
-      d = `M${r(p1[0])},${r(p1[1])} C${r(p1[0])},${r(my)} ${r(p2[0])},${r(my)} ${r(p2[0])},${r(p2[1])}`;
-    } else {
-      p1 = centre(ea, "r", box); p2 = centre(eb, "l", box);
-      const mx = (p1[0] + p2[0]) / 2;
-      d = `M${r(p1[0])},${r(p1[1])} C${r(mx)},${r(p1[1])} ${r(mx)},${r(p2[1])} ${r(p2[0] - 2)},${r(p2[1])}`;
-    }
+    const p1 = centre(ea, "r", box), p2 = centre(eb, "l", box);
+    const mx = (p1[0] + p2[0]) / 2;
+    const d = `M${r(p1[0])},${r(p1[1])} C${r(mx)},${r(p1[1])} ${r(mx)},${r(p2[1])} ${r(p2[0] - 2)},${r(p2[1])}`;
     const id = "e" + out.length;
-    const head = mgr ? (cls.includes("live") ? "mgrlive" : "mgr") : cls.includes("live") ? "live" : cls.includes("done") ? "done" : "idle";
+    const head = cls.includes("live") ? "live" : cls.includes("done") ? "done" : "idle";
     out += `<path id="${id}" class="fedge ${cls}" d="${d}" marker-end="url(#ah-${head})"/>`;
-    if (cls.includes("live")) out += `<circle class="fdot${mgr ? " mgr" : ""}" r="3.2"><animateMotion dur="${mgr ? 1.4 : 1.1}s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`;
+    if (cls.includes("live")) out += `<circle class="fdot" r="3.2"><animateMotion dur="1.1s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`;
   };
   for (let i = 0; i < order.length - 1; i++) {
     const A = byCol(order[i]), B = byCol(order[i + 1]);
@@ -444,10 +433,9 @@ function drawEdges(m) {
       const live = b.st === "running" && (a.st === "done" || a.st === "running" || a.st === "skipped" || a.ghost);
       // a hop the run has already passed through (including a stage it skipped) is drawn as travelled
       const done = !live && (b.st === "done" || b.st === "failed" || b.st === "hold" || b.st === "skipped") && a.st !== "pending";
-      edge(a, b, live ? "live" : done ? "done" : "", false);
+      edge(a, b, live ? "live" : done ? "done" : "");
     }
   }
-  for (const v of m.viaNodes) edge(m.mgr, v, "mgr" + (v.st === "running" ? " live" : ""), true);
   // Rebuilding the SVG restarts every travelling dot and dash from zero. This runs every second, so rebuilding
   // unconditionally meant a dot never got further than the first few pixels: the arrows looked dead.
   const next = defs + out;
@@ -457,7 +445,7 @@ function drawEdges(m) {
 function flowPulse(s) {
   if (!state?.run || s.run !== state.run.id) return;
   const key = s.role === "laya" || s.role === "jev" ? "laya" : s.role === "manager" ? "manager" : s.label || s.role;
-  const el = document.querySelector(`#fstage [data-k="${CSS.escape(key)}"]`) || (s.role ? document.querySelector(`#fstage [data-k="${CSS.escape(s.role + "~")}"]`) : null);
+  const el = document.querySelector(`#fstage [data-k="${CSS.escape(key)}"]`) || (s.role ? document.querySelector(`#fstage [data-k="${CSS.escape((s.role === "planner" || s.role === "researcher" ? "manager" : s.role) + "~")}"]`) : null);
   if (!el) return;
   el.classList.remove("burst"); void el.offsetWidth; el.classList.add("burst");
   clearTimeout(BUBBLE_T.get(el));
@@ -493,6 +481,13 @@ $("log").addEventListener("click", (e) => {
   opened.has(k) ? opened.delete(k) : opened.add(k);
   renderLog();
 });
+
+$("logbig").addEventListener("click", () => {
+  const on = document.querySelector(".wrap").classList.toggle("big");
+  $("logbig").textContent = on ? "⤡ thu" : "⤢ rộng";
+  try { localStorage.setItem("jevLogBig", on ? "1" : "0"); } catch { /* private window: the toggle still works */ }
+});
+try { if (localStorage.getItem("jevLogBig") === "1") $("logbig").click(); } catch { /* no storage */ }
 
 const es = new EventSource("/events");
 let lastSnap = Date.now();

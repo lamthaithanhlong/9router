@@ -14,12 +14,23 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 ## [Unreleased]
 
 ### Added
+- **Planner and researcher share one MANAGER column in the FLOW graph** (`lib/ui/index.html`). Both are jobs of the
+  one manager seat (it rotates codex <-> deepseek-host), but the graph drew them as two separate stages that read as
+  "skipped" and a seat box floating underneath. The seat is now a stage in the path: each planner / researcher that
+  ran appears there with its route and turn, and a run that needed neither shows one idle "planner · researcher" node.
+- **A bigger session log** with a `⤢ rộng` toggle (the log takes the whole width, remembered per browser). Rows are
+  12 px, the pane is up to 70% of the window height (was 420 px), the right column is 46% of the width (was 460 px),
+  and below 1100 px everything stacks instead of the stage cards sliding under the log.
 - **The FLOW graph shows direction and what each running stage is doing right now** (`lib/ui/index.html`). Every
   edge ends in an arrowhead (blue and thicker while a stage runs, green once travelled, a hop through a skipped
   stage counts as travelled), and a running node carries a live line with the child's latest action
   (`gọi bash …`, `nghĩ …`, `kết edit ok …`) and a blinking cursor.
 
 ### Fixed
+- **The first page to connect was sent the whole steps file again as "new" steps** (`lib/dashboard.js`). The tail
+  offset stayed at 0 while nobody was watching, so the snapshot's log rows were repeated and every old line popped
+  a bubble on the graph. The offset now follows the end of the file while no page is connected.
+- **The Jev gate node picked up `jev` lines of other runs** (operator precedence in its filter).
 - **The dashboard froze on the first snapshot: stage cards, the FLOW graph and the cost block only changed after a
   page reload.** The server sent one `snapshot` on connect and afterwards only single `step` lines, which extend
   the log and nothing else. It now pushes a fresh snapshot whenever steps arrive (and every ~5 s while someone is

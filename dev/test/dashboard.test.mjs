@@ -183,3 +183,42 @@ test("dashboard: a step appended while a page is connected also refreshes the sn
     dash.close();
   }
 });
+
+test("page: the script compiles and every $(\"id\") it reads exists in the markup", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { Script } = await import("node:vm");
+  const html = readFileSync(new URL("../../plugin/jev-orchestrator/lib/ui/index.html", import.meta.url), "utf8");
+  const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+  assert.ok(script, "the page has its script");
+  new Script(script); // a syntax error would blank the whole dashboard
+  const missing = [...new Set([...script.matchAll(/\$\("([a-z-]+)"\)/g)].map((m) => m[1]))].filter((id) => !html.includes(`id="${id}"`));
+  assert.deepEqual(missing, [], "removing an element without its readers throws on every render");
+});
+
+test("dashboard: the first page to connect is not sent the whole backlog again as new steps", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jev-dash-backlog-"));
+  const stepsFile = join(dir, "steps.jsonl");
+  writeFileSync(stepsFile, Array.from({ length: 30 }, (_, i) => step({ text: `old line ${i}`, role: "worker", label: "worker-1" })).join("\n") + "\n");
+  writeFileSync(join(dir, "runs.jsonl"), "");
+  const pageFile = join(dir, "index.html");
+  writeFileSync(pageFile, "<html></html>");
+  const cfg = { stepsFile, runLog: join(dir, "runs.jsonl"), ledgerFile: join(dir, "l.json"), budgets: {}, routes: {}, cost: { dbFile: join(dir, "none.sqlite") } };
+  const dash = createDashboard({ cfg, ledger: { load: () => ({ day: "d", used: {} }) }, version: "t", port: 0, pageFile, pollMs: 20, log: () => {} });
+  try {
+    const base = await until(() => dash.url());
+    await new Promise((r) => setTimeout(r, 120)); // several ticks pass with nobody connected
+    const reader = (await fetch(`${base}/events`)).body.getReader();
+    const dec = new TextDecoder();
+    let text = "";
+    const t0 = Date.now();
+    while (Date.now() - t0 < 300) {
+      const r = await Promise.race([reader.read(), new Promise((res) => setTimeout(() => res(null), 100))]);
+      if (r?.value) text += dec.decode(r.value);
+    }
+    await reader.cancel();
+    assert.match(text, /event: snapshot/);
+    assert.equal((text.match(/^event: step$/gm) ?? []).length, 0, "the snapshot already holds those lines; replaying them doubles the log");
+  } finally {
+    dash.close();
+  }
+});
