@@ -13,12 +13,14 @@ import { resolveRole } from "./roles.js";
 //   getChanges(cwd), runTests(cwd, command)
 //   log(msg)
 
-async function runAgent(deps, role, message, label) {
+async function runAgent(deps, role, message, label, opts = {}) {
   const { cfg } = deps;
   const prompt = `${deps.loadPrompt(role)}\n\n---\n\n${message}`;
   const inTokens = estimateTokens(prompt);
   const need = inTokens + cfg.limits.assumedOutputTokens;
-  const skip = [];
+  // `opts.skipRoutes` forces a role off the route it would otherwise pick — how the cross-check
+  // asks a *second* reviewer instead of the same one again.
+  const skip = [...(opts.skipRoutes ?? [])];
   const attempts = [];
   for (;;) {
     const res = resolveRole(role, cfg, deps.ledger, need, { skip, health: deps.health });
@@ -28,6 +30,23 @@ async function runAgent(deps, role, message, label) {
     }
     const { route } = res;
     deps.log(`${role} -> ${route.key}${res.fellBack ? " (fallback)" : ""}`);
+
+    // Part D: ask a known-flaky route whether it answers at all, before spending a child on it.
+    // The Cursor route can return HTTP 200 with no text; a child that discovers that the slow way
+    // has taken 1638s to abort. One 15s probe replaces that wait, and a route that fails the probe
+    // goes into the same cooldown as a route that failed for real.
+    if (cfg.probe?.enabled !== false && route.probe === true && deps.probe) {
+      const p = await deps.probe.probe(route.key);
+      if (!p.ok) {
+        deps.health?.fail(route.key);
+        skip.push(route.key);
+        attempts.push(`${route.key}: ${p.reason}`);
+        deps.steps?.step(`probe ${route.key}: ${p.reason} - skipped`, { run: deps.runId, role, label, route: route.key });
+        deps.log(`${role} on ${route.key} skipped: probe ${p.reason}`);
+        continue;
+      }
+      deps.steps?.step(`probe ${route.key}: answered ${p.reason} in ${p.ms}ms`, { run: deps.runId, role, label, route: route.key, usd: 0, taskUsd: deps.cost?.taskUsd() ?? 0 });
+    }
 
     // Cost caps: only money routes are refused. Free and quota routes are still measured and
     // written to the step feed, but a list price (e.g. 9Router's recorded $0.0335 for a Cursor
@@ -286,6 +305,39 @@ export async function runPipeline(deps, input) {
       const verdict = parseVerdict(r.text);
       if (verdict.verdict === "approve") {
         if (!r.route.backup) strongReview = true;
+        // Part D: second opinions before the diff is accepted. The owner asked for codex and
+        // deepseek to both read the change and report; a split verdict goes to a person instead
+        // of being settled by whichever reviewer happened to run first.
+        const opinions = [{ key: r.route.key, verdict: "approve", issues: [] }];
+        const crossCheck = Array.isArray(cfg.review?.crossCheck) ? cfg.review.crossCheck : [];
+        for (const want of crossCheck) {
+          if (want === r.route.key) continue;
+          const second = await runAgent(
+            deps,
+            "reviewer",
+            withPlan(plan, `# SECOND OPINION\nA first reviewer approved this diff. Give your own verdict.\n\n${triggers.join("\n")}\n\n# DIFF\n${v.changes.diff}`),
+            `reviewer-${opinions.length + 1}`,
+            { skipRoutes: [r.route.key] },
+          );
+          if (second.status === "held") {
+            // Could not be obtained is NOT a disagreement: report it as unavailable and move on.
+            opinions.push({ key: want, verdict: "unavailable", issues: [second.reason] });
+            continue;
+          }
+          const sv = parseVerdict(second.text);
+          opinions.push({ key: second.route.key, verdict: sv.verdict, issues: sv.issues });
+          if (sv.verdict === "approve" && !second.route.backup) strongReview = true;
+        }
+        if (opinions.length > 1) {
+          const line = opinions.map((o) => `${o.key} -> ${o.verdict}`).join(" | ");
+          deps.steps?.step(`review: ${line}`, { run: deps.runId, role: "reviewer", label: "reviewer", route: r.route.key, usd: 0, taskUsd: deps.cost?.taskUsd() ?? 0 });
+          notes.push(`review cross-check: ${line}`);
+          const split = opinions.some((o) => o.verdict !== "approve" && o.verdict !== "unavailable");
+          if (split && cfg.review?.onDisagree === "awaiting_human") {
+            notes.push("reviewers disagreed: a person must decide (review.onDisagree = awaiting_human)");
+            return end("awaiting_human");
+          }
+        }
         break;
       }
       notes.push(`review round ${round}: ${verdict.issues.join("; ")}`);

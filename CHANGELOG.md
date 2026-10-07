@@ -49,8 +49,31 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
   `usageDaily`, the last 10 upstream calls from `usageHistory`, and the current ledger contents. It performs
   no model call and no subagent call — only file reads and the read-only SQLite handle — so checking
   progress costs nothing. Registered only when `cfg.cost.enabled`.
+- **`jev_probe` tool** — one call that answers "is that route actually returning anything?". It asks every
+  route marked `probe: true` and prints a table of route / model / cost / alive / ms / sample. It shares the
+  cached probe with the pipeline, so running `jev_probe` just before a `jev_run` makes that run's own probes
+  free. No subagent is started.
+- **A probe before a flaky route is committed to a child** (`lib/probe.js`, `createProbe`). The Cursor route
+  can answer HTTP 200 with no text — an `ERROR_NOT_LOGGED_IN` carried inside the stream, which 9Router records
+  as `[Empty streaming response]` and counts as a success. The pipeline already treated an empty reply as a
+  failed route, but only after the child had waited: the run log shows `worker-1 ended with aborted` after
+  1638s. Now a route flagged `probe: true` (cursor, manager) is asked first with a 15s timeout and must return
+  the literal `PONG`; a route that does not is skipped, put into the same cooldown as a real failure, and
+  written to the step feed as `probe cursor-workers: empty reply (HTTP 200, 0 chars) - skipped`. Routes that
+  answer when they answer (codex, deepseek, backup) are never probed: that would spend quota or money to learn
+  nothing. One probe is one small upstream call, not an agent.
+- **A cross-check before a diff is accepted** (`review.crossCheck`, `review.onDisagree`). After the primary
+  reviewer approves, each named route reads the same plan and diff and gives its own verdict; the report shows
+  them side by side (`review cross-check: codex-head -> approve | deepseek-v4.1-flash -> changes`) and a split
+  verdict goes to a person instead of being settled by whichever reviewer ran first. A second opinion that
+  could not be obtained (route out of budget, probe failed) is reported as `unavailable`, never as a
+  disagreement. Empty by default.
 
 ### Changed
+- **Roles follow strength rather than price.** `chains` now defaults to
+  `planner/researcher: [codex, deepseek, backup]` (codex researches best), `worker: [deepseek, cursor, backup]`
+  (deepseek writes code and reasons about the system; Cursor is a last resort because of the empty-200 bug) and
+  `reviewer/final_reviewer: [codex, deepseek, backup]`.
 - `formatReport` gains a `Cost:` section, printed even when nothing was spent:
   `Cost: $0.1904 this task (task cap $0.08, call cap $0.001)` / `$6.7086 today via 9Router, 200 calls`
   (or `today: n/a` when 9Router is unreadable). The `Who ran:` block is unchanged.

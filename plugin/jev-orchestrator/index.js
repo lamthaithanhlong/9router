@@ -9,6 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createApiSpawn } from "./lib/api.js";
 import { createCostTracker } from "./lib/cost.js";
+import { createProbe } from "./lib/probe.js";
 import { createLaya } from "./lib/laya.js";
 import { Ledger } from "./lib/budget.js";
 import { RouteHealth } from "./lib/health.js";
@@ -98,7 +99,7 @@ export function newQueue(cfg) {
   return createQueue({ ...cfg.cursorQueue, dir: expandHome(cfg.cursorQueue.dir) });
 }
 
-export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg)) {
+export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg), probe = null) {
   const laya = createLaya(cfg.laya, { log });
   const apiSpawn = createApiSpawn(cfg, { log });
   return {
@@ -164,6 +165,7 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         log,
         cost,
         steps,
+        probe,
         runId: stamp,
         loadPrompt,
         spawn: (route, prompt, label, role) => {
@@ -295,6 +297,42 @@ export function buildWatchTool(ctx, cfg, ledger, log = () => {}, cost) {
 function sinceFileName(p) { return p.split("/").slice(-1)[0]; }
 function escape(s) { return String(s).replace(/[\r\n]/g, " "); }
 
+// `jev_probe` — the single call that answers "is that route actually returning anything?".
+// It asks every route marked `probe: true` and prints a table. It shares the cached probe with
+// the pipeline, so running jev_probe just before a jev_run makes that run's own probes free.
+export function buildProbeTool(ctx, cfg, log = () => {}, probe) {
+  return {
+    name: "jev_probe",
+    description:
+      "Ask every route that can go silent whether it really answers. One small upstream call per probed route " +
+      "(cursor and manager only: codex, deepseek and backup answer when they answer, and probing them would " +
+      "spend quota or money for nothing). No subagent is started, no prompt file is read.",
+    parameters: { type: "object", properties: {} },
+    output: { schema: { type: "string" }, render: (_args, value) => [{ type: "text", text: value }] },
+    timeoutMs: Math.max(60_000, (cfg.probe?.timeoutMs ?? 15_000) * 8),
+    async execute() {
+      const keys = probe.probedRouteKeys();
+      if (!keys.length) return "No route carries probe: true, so there is nothing to ask.";
+      const rows = [];
+      for (const key of keys) {
+        // Sequential on purpose: these routes share a rate limit, and a burst is what makes one fail.
+        const r = await probe.probe(key);
+        rows.push({ key, model: cfg.routes[key]?.model ?? "?", cost: cfg.routes[key]?.cost ?? "?", ...r });
+      }
+      const width = Math.max(5, ...rows.map((r) => r.key.length));
+      const lines = [`${"route".padEnd(width)}  ${"model".padEnd(22)} ${"cost".padEnd(6)} ${"alive".padEnd(5)} ${"ms".padStart(6)}  sample`];
+      for (const r of rows) {
+        lines.push(
+          `${r.key.padEnd(width)}  ${String(r.model).padEnd(22)} ${String(r.cost).padEnd(6)} ${(r.ok ? "yes" : "NO").padEnd(5)} ${String(r.ms).padStart(6)}  ${JSON.stringify(r.sample)} (${r.reason})`,
+        );
+      }
+      const dead = rows.filter((r) => !r.ok);
+      lines.push("", dead.length ? `${dead.map((r) => r.key).join(", ")} did not answer PONG.` : "Every probed route answered PONG.");
+      return lines.join("\n");
+    },
+  };
+}
+
 export function apply(ctx, userConfig) {
   const cfg = resolveConfig(userConfig ?? {});
   const ledger = new Ledger(expandHome(cfg.ledgerFile), cfg.budgets);
@@ -306,13 +344,17 @@ export function apply(ctx, userConfig) {
   // jev_watch is the read-only companion tool: it only reads the steps file, 9Router SQLite, and the ledger.
   // The cost tracker is also cheap (a single read-only DB handle), so we create it once per process.
   const watchCost = cfg.cost?.enabled !== false ? createCostTracker({ ...cfg, cost: { ...cfg.cost, dbFile: expandHome(cfg.cost.dbFile) } }, { log }) : null;
+  // One probe cache per process, shared by every jev_run and by jev_probe, so a route is asked
+  // once per ttlMs rather than once per child.
+  const probe = cfg.probe?.enabled !== false ? createProbe({ ...cfg, probe: { ...cfg.probe, dataDir: expandHome(cfg.probe?.dataDir ?? "~/.9router") } }, { log }) : null;
   const disposers = [];
 
   const mount = () => {
     if (disposers.length) return;
-    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue)));
+    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe)));
     if (watchCost) disposers.push(ctx.tools.register(buildWatchTool(ctx, cfg, ledger, log, watchCost)));
-    log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ jev_watch)" : ""}`);
+    if (probe) disposers.push(ctx.tools.register(buildProbeTool(ctx, cfg, log, probe)));
+    log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ jev_watch)" : ""}${probe ? " (+ jev_probe)" : ""}`);
   };
 
   // The tool needs the subagent provider; mount it whenever that appears.

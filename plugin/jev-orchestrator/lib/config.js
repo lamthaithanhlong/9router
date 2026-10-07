@@ -14,8 +14,12 @@ export const DEFAULTS = {
 
   routes: {
     codex: { provider: "router9", model: "codex-head", cost: "quota", group: "codex" },
-    cursor: { provider: "router9", model: "cursor-workers", cost: "free", group: "cursor" },
-    manager: { provider: "router9", model: "manager-temp", cost: "free", group: "cursor" }, // also Cursor: shares its cap
+    // Cursor through 9Router must be probed before a child is committed to it: it can answer
+    // HTTP 200 with no text (ERROR_NOT_LOGGED_IN inside the stream, which 9Router records as
+    // "[Empty streaming response]" and counts as success). A child that finds out the slow way
+    // burns ~70s and, per the run log, has taken 1638s to abort. See lib/probe.js.
+    cursor: { provider: "router9", model: "cursor-workers", cost: "free", group: "cursor", probe: true },
+    manager: { provider: "router9", model: "manager-temp", cost: "free", group: "cursor", probe: true }, // also Cursor: shares its cap
     deepseek: { provider: "deepseek-host", model: "deepseek-v4.1-flash", cost: "money", group: "deepseek" },
     // Last resort when everything above is out of quota or failing: a 9Router combo of free OpenCode and
     // OpenRouter models, tried in order. The combo itself is made in the 9Router dashboard
@@ -173,6 +177,25 @@ export const DEFAULTS = {
     enforce: true,            // false = warn only, never refuse the call
     // Manual USD-per-call per route. Wins over the rolling average the tracker learns in-process.
     assume: {},               // { routeKey: usdPerCall } -- e.g. { cursor: 0.0335 }
+  },
+
+  // Ask before committing a child to a route that is known to answer nothing. Only routes whose
+  // definition carries `probe: true` (cursor, manager) are asked; probing codex, deepseek or
+  // backup would spend quota or money to learn nothing. See lib/probe.js.
+  probe: {
+    enabled: true,
+    baseUrl: "http://127.0.0.1:20128", // 9Router; the probe is a plain OpenAI /chat/completions call
+    timeoutMs: 15_000,  // a route that has not said PONG by now is not worth a child's time
+    ttlMs: 300_000,     // how long one answer is trusted; a good answer is not re-asked per call
+    dataDir: "~/.9router", // machine-id + auth/cli-secret live here, for the x-9r-cli-token header
+  },
+
+  // The owner asked for a second opinion rather than a single reviewer verdict. `crossCheck`
+  // lists route keys; after the primary reviewer approves, each named route reads the same plan
+  // and diff. A split verdict never merges on its own. Empty by default (opt in from config).
+  review: {
+    crossCheck: [],              // e.g. ["codex", "deepseek"]
+    onDisagree: "awaiting_human", // the only value implemented today
   },
 
   // External OpenAI-compatible HTTP API routes (lib/api.js). Off by default: the api_* routes are

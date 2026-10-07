@@ -40,10 +40,10 @@ test("module contract: name, inject, apply", () => {
   assert.equal(typeof apply, "function");
 });
 
-test("apply: registers jev_run when the spawn provider is present", () => {
+test("apply: registers jev_run, jev_watch and jev_probe when the spawn provider is present", () => {
   const f = fakeCtx();
   apply(f.ctx, {});
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch", "jev_probe"]);
 });
 
 test("apply: waits for the provider, mounts when it appears, unmounts when it goes", () => {
@@ -53,17 +53,23 @@ test("apply: waits for the provider, mounts when it appears, unmounts when it go
   f.handlers.get("subagent/provider-added")({ name: "fork" });
   assert.equal(f.registered.length, 0); // some other provider
   f.handlers.get("subagent/provider-added")({ name: "spawn" });
-  assert.equal(f.registered.length, 2);
+  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch", "jev_probe"]);
   f.handlers.get("subagent/provider-added")({ name: "spawn" });
-  assert.equal(f.registered.length, 2); // not mounted twice
+  assert.equal(f.registered.length, 3); // not mounted twice
   f.handlers.get("subagent/provider-removed")("spawn");
   assert.equal(f.registered.length, 0);
 });
 
-test("apply: jev_watch is not registered when cost.enabled is false", () => {
+test("apply: jev_watch is absent when cost.enabled is false; jev_probe does not depend on cost", () => {
   const f = fakeCtx();
   apply(f.ctx, { cost: { enabled: false } });
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_probe"]);
+});
+
+test("apply: jev_probe is absent when probe.enabled is false, jev_watch still mounts", () => {
+  const f = fakeCtx();
+  apply(f.ctx, { probe: { enabled: false } });
+  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch"]);
 });
 
 test("tool definition: schema shape the Harness expects", () => {
@@ -115,6 +121,27 @@ test("execute: a failing primary worker route is followed by the backup route, w
   assert.deepEqual(f.starts.map((s) => s.req.agentOptions.model), ["cursor-workers", "backup-free"]);
   assert.deepEqual(f.starts[1].req.toolFilter, f.starts[0].req.toolFilter);
 });
+test("execute: a route that fails its probe is skipped before any child is started on it", async () => {
+  const f = fakeCtx();
+  const cfg = resolveConfig({ laya: { enabled: false }, ledgerFile: "unused" });
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), cfg.budgets);
+  const asked = [];
+  const probe = {
+    probedRouteKeys: () => ["cursor"],
+    probe: async (key) => {
+      asked.push(key);
+      return { ok: false, ms: 5, chars: 0, sample: "", reason: "empty reply (HTTP 200, 0 chars)", at: Date.now() };
+    },
+  };
+  // buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe)
+  const tool = buildTool(f.ctx, cfg, ledger, () => {}, undefined, undefined, undefined, undefined, probe);
+  const exec = { agent: { id: "head" }, signal: new AbortController().signal };
+  await tool.execute({ task: "t", cwd: "/definitely/not/a/repo", plan: "no" }, exec).catch(() => {});
+  assert.deepEqual(asked, ["cursor"], "the probed route was asked before a child was committed");
+  assert.ok(f.starts.length >= 1, "the pipeline still ran on the route after it");
+  assert.equal(f.starts[0].req.agentOptions.model, "backup-free", "the dead route never got a child");
+});
+
 test("execute: refuses to run without a calling agent", async () => {
   const f = fakeCtx();
   const cfg = resolveConfig();
