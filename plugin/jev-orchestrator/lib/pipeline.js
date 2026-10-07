@@ -97,8 +97,21 @@ function digest(text, words) {
 
 async function askLaya(deps, id, state, instructions) {
   const t0 = Date.now();
-  const p = await deps.laya.noul(id, state, instructions);
-  deps.trace.push({ role: "laya", label: id, key: "laya", provider: "laya", model: "systemone", status: p === null ? "unavailable" : "ok", detail: p, ms: Date.now() - t0 });
+  // Metered: the hosted Jev is charged per input token, so the daily cap must be
+  // checked BEFORE the call, and the real usage charged after it.
+  const estimate = estimateTokens(state) + 128;
+  if (deps.ledger?.canSpend && !deps.ledger.canSpend("laya", estimate, "laya")) {
+    deps.trace.push({ role: "laya", label: id, key: "laya", provider: "laya", model: "systemone", status: "skipped", detail: "daily token cap reached", ms: 0 });
+    return null;
+  }
+  let tokensIn = 0;
+  const p = await deps.laya.noul(id, state, instructions, (usage) => { tokensIn = usage?.inputTokens ?? 0; });
+  if (tokensIn > 0) deps.ledger?.charge?.("laya", tokensIn);
+  deps.trace.push({
+    role: "laya", label: id, key: "laya", provider: "laya", model: "systemone",
+    status: p === null ? "unavailable" : "ok", detail: p, ms: Date.now() - t0,
+    ...(tokensIn > 0 ? { tokensIn } : {}),
+  });
   return p;
 }
 

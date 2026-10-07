@@ -13,6 +13,25 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-07
+
+### Added
+- **Hosted Jev (TypeSafe) as the primary System One source**: `laya.url`, `laya.keyEnv`, `laya.keyFile` and
+  `laya.model`, with the free local `laya-serve` kept as `laya.fallbackUrl`. Measured on a real plan
+  question: the hosted model answers in **0.25 s** against **12.2 s** for the local engine, at
+  **321 input tokens** (Jev 1.13 is $0.042 per million input tokens, output free). A cloud URL never
+  spawns `laya-ctl`: only a loopback URL may start the local engine.
+- **A key file as a credential source** (`lib/keys.js`, shared by Laya and the API routes): the
+  environment wins when set, a `0600` file is the fallback. DSH resolves `$DSH_HOME/.credentials.yaml`
+  per request for its own adapters but does **not** export it into `process.env`, so plugin code reading
+  only `process.env[keyEnv]` could never see such a key.
+- **A daily input-token cap on the Jev route** (`budgets.laya`, default 2 000 000 ≈ $0.084/day at Jev 1.13
+  pricing). It is checked *before* the call and the real usage is charged afterwards, so a runaway loop
+  stops instead of spending.
+
+### Fixed
+- `lib/api.js` accepts `keyFile` as well as `keyEnv`, and an injectable `readFile` for tests.
+
 ## [0.6.1] - 2026-10-07
 
 ### Added

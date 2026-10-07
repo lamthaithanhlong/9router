@@ -3,7 +3,12 @@
 // already walks the chain. Secrets: the key travels in the request headers
 // only. It is never logged, and it is scrubbed out of every error below
 // (errors may name the env var, never its value).
-export function createApiSpawn(cfg, { fetchImpl = globalThis.fetch, log = () => {} } = {}) {
+// The key comes from the environment when set, else from a 0600 file: DSH does
+// not export .credentials.yaml into process.env, so a file is the source that
+// actually works inside the app.
+import { resolveSecret, describeMissingSecret } from "./keys.js";
+
+export function createApiSpawn(cfg, { fetchImpl = globalThis.fetch, log = () => {}, readFile } = {}) {
   const scrub = (msg, key) => {
     let out = String(msg ?? "");
     if (key) out = out.split(key).join("[redacted]");
@@ -14,9 +19,9 @@ export function createApiSpawn(cfg, { fetchImpl = globalThis.fetch, log = () => 
     const name = route.key;
     const api = route.api ?? {};
     const url = `${api.baseUrl}${api.path ?? "/chat/completions"}`;
-    const envName = api.keyEnv;
-    const key = envName ? process.env[envName] : undefined;
-    if (!key) throw new Error(`api route ${name} needs env ${envName}`);
+    const secret = resolveSecret({ keyEnv: api.keyEnv, keyFile: api.keyFile }, { readFile });
+    if (!secret) throw new Error(`api route ${name} needs ${describeMissingSecret({ keyEnv: api.keyEnv, keyFile: api.keyFile })}`);
+    const key = secret.value;
     const timeoutMs = api.timeoutMs ?? cfg?.limits?.apiTimeoutMs ?? 300_000;
     const headers = { "content-type": "application/json", ...(api.headers ?? {}) };
     for (const h of Object.keys(headers)) {
