@@ -26,13 +26,27 @@ async function runAgent(deps, role, message, label) {
     const { route } = res;
     deps.log(`${role} -> ${route.key}${res.fellBack ? " (fallback)" : ""}`);
     let text = "";
+    let tokensReal = null;
     let failure;
     // Wait for a slot on this route's upstream before starting the child (queue, never refuse).
     const release = (await deps.limiter?.acquire(route.group ?? route.key)) ?? (() => {});
     const queuedMs = release.queuedMs ?? 0;
     const t0 = Date.now();
     try {
-      text = await deps.spawn(route, prompt, label ?? role, role);
+      const raw = await deps.spawn(route, prompt, label ?? role, role);
+      // spawn resolves to a string (subagents, queue) or { text, tokensIn, tokensOut } (lib/api.js).
+      // Real counts count only when both are finite and nonzero: { 0, 0 } means the upstream sent
+      // no usage, and then the estimate path still applies. Anything else is no content.
+      if (typeof raw === "string") {
+        text = raw;
+      } else if (raw && typeof raw.text === "string") {
+        text = raw.text;
+        if (Number.isFinite(raw.tokensIn) && Number.isFinite(raw.tokensOut) && raw.tokensIn + raw.tokensOut > 0) {
+          tokensReal = { tokensIn: raw.tokensIn, tokensOut: raw.tokensOut };
+        }
+      } else {
+        throw new Error("the route returned no content");
+      }
       // A route that answers with nothing has not worked: an upstream that returns an empty 200 (Cursor through
       // 9Router does) would otherwise count as a success and no fallback would ever run.
       if (text.trim() === "") throw new Error("the route returned no content");
@@ -43,7 +57,7 @@ async function runAgent(deps, role, message, label) {
     } finally {
       release();
       // A child that failed still consumed its input.
-      deps.ledger.charge(route.key, inTokens + estimateTokens(text));
+      deps.ledger.charge(route.key, tokensReal ? tokensReal.tokensIn + tokensReal.tokensOut : inTokens + estimateTokens(text));
       deps.trace.push({
         role,
         label: label ?? role,
@@ -56,8 +70,8 @@ async function runAgent(deps, role, message, label) {
         ...(failure ? { error: String(failure.message ?? failure).slice(0, 300) } : {}),
         ms: Date.now() - t0,
         ...(queuedMs > 500 ? { queuedMs } : {}),
-        tokensIn: inTokens,
-        tokensOut: estimateTokens(text),
+        tokensIn: tokensReal ? tokensReal.tokensIn : inTokens,
+        tokensOut: tokensReal ? tokensReal.tokensOut : estimateTokens(text),
       });
     }
     if (!failure) {

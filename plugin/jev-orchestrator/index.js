@@ -7,6 +7,7 @@
 // No `Config` schema and no @deepseek-ai/* imports: the module has no runtime
 // dependencies, so it loads from a plain relative path in cordis.patch.yml.
 import { readFileSync } from "node:fs";
+import { createApiSpawn } from "./lib/api.js";
 import { createLaya } from "./lib/laya.js";
 import { Ledger } from "./lib/budget.js";
 import { RouteHealth } from "./lib/health.js";
@@ -97,6 +98,7 @@ export function newQueue(cfg) {
 
 export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHealth(cfg.limits.routeCooldownMs), limiter = newLimiter(cfg), filter = new ToolFilter(cfg), queue = newQueue(cfg)) {
   const laya = createLaya(cfg.laya, { log });
+  const apiSpawn = createApiSpawn(cfg, { log });
   return {
     name: cfg.toolName,
     description:
@@ -154,6 +156,10 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         log,
         loadPrompt,
         spawn: (route, prompt, label, role) => {
+          if (route.provider === "api") {
+            // A text-only role on an external HTTP API: no Harness child is started.
+            return apiSpawn(route, prompt, label, role);
+          }
           if (route.kind === "queue") {
             // A person-driven app takes this task through files; no Harness child is started.
             const id = nextTaskId(label);

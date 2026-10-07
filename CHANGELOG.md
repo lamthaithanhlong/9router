@@ -13,6 +13,21 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-07
+
+### Added
+- **HTTP API routes for the text-only roles** (`lib/api.js`, routes `api_deepseek` and `api_openrouter`).
+  An OpenAI-compatible POST carries the role's prompt; the reply text and the upstream usage counts are
+  used directly. The API key travels in the request header only and never appears in an error, trace or
+  log line (errors name the env var, never its value). No retries inside `api.js`: the pipeline walks
+  the chain as usual, so a missing key or a failed call falls back to the next route.
+- Config keys `api.enabled` (default `false`; opt-in inserts the api routes directly before `"backup"`
+  in the four text-only chains — planner, researcher, reviewer, final_reviewer — while the worker chain
+  stays untouched), `limits.apiTimeoutMs` (default 300_000), and placeholder daily token caps per api
+  route (`unit: "tokens"`; tune to the real upstream quota, the numbers are only a safety net).
+- `deps.spawn` may resolve to `{ text, tokensIn, tokensOut }`; the pipeline charges the real counts
+  and records them on the trace entry, and keeps the estimate path for strings, failures, and absent usage.
+
 ## [0.6.0] - 2026-10-07
 
 ### Added

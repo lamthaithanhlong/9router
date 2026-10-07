@@ -26,6 +26,14 @@ export const DEFAULTS = {
     //   chains: { worker: [cursorqueue, backup] }
     // A task nobody picks up within cursorQueue.waitMs is withdrawn and the next route on the chain takes it.
     cursorqueue: { kind: "queue", provider: "cursor-app", model: "queue", cost: "free", group: "cursorqueue" },
+    // External OpenAI-compatible HTTP API routes (lib/api.js). Disabled by default: with api.enabled false
+    // they are removed from `routes` and from every chain, so a config that does not opt in sees nothing.
+    // Enable with config: api: { enabled: true }. The model, baseUrl and keyEnv are the defaults; a 9Router
+    // deployment is added by config alone (a route with provider "api" + the env var it points at).
+    api_deepseek: { provider: "api", model: "deepseek-v4.1-flash", cost: "money", group: "api",
+      api: { baseUrl: "https://api.deepseek.com/v1", keyEnv: "DEEPSEEK_API_KEY", model: "deepseek-chat" } },
+    api_openrouter: { provider: "api", model: "openrouter-auto", cost: "money", group: "api",
+      api: { baseUrl: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY", model: "openrouter/auto" } },
   },
 
   cursorQueue: {
@@ -56,6 +64,10 @@ export const DEFAULTS = {
   budgets: {
     codex: { unit: "calls", daily: 40, reserveFraction: 0.2, reserveFor: ["final_reviewer"] },
     deepseek: { unit: "tokens", daily: 300_000, reserveFraction: 0, reserveFor: [] },
+    // Placeholder daily cap per external API route so a runaway loop cannot spend without limit.
+    // Tune to the real upstream quota in production; the number below is only a safety net.
+    api_deepseek: { unit: "tokens", daily: 200_000, reserveFraction: 0, reserveFor: [] },
+    api_openrouter: { unit: "tokens", daily: 200_000, reserveFraction: 0, reserveFor: [] },
   },
   ledgerFile: "~/.dsh/jev-ledger.json",
   runLog: "~/.dsh/jev-runs.jsonl", // one line per jev_run: who ran, on what, how long
@@ -86,6 +98,8 @@ export const DEFAULTS = {
     // One call may carry at most this many sub-tasks / research questions; more is refused with a message.
     maxTasks: 6,
     maxResearch: 3,
+    // One HTTP call to an api route may take at most this long; on hit we abort and throw.
+    apiTimeoutMs: 300_000,
   },
 
   // Gate 2 (the paid reviewer) runs when one of these fires. They are computed
@@ -129,6 +143,12 @@ export const DEFAULTS = {
 
   // Used when Laya is down.
   heuristics: { planChars: 400 },
+
+  // External OpenAI-compatible HTTP API routes (lib/api.js). Off by default: the api_* routes are
+  // stripped from `routes` and from every chain until api.enabled is true, so a config that does not
+  // opt in sees no API at all. On opt-in, api routes are inserted right before `backup` in the four
+  // text-only chains (planner, researcher, reviewer, final_reviewer); the worker chain is untouched.
+  api: { enabled: false },
 };
 
 export function expandHome(path) {
@@ -147,5 +167,31 @@ export function resolveConfig(user = {}) {
     }
     return out;
   };
-  return merge(DEFAULTS, user);
+  const cfg = merge(DEFAULTS, user);
+  // API routes (provider === "api") are opt-in. Off: strip every api route from `routes` and from
+  // every chain so a config that does not opt in is byte-for-byte the old behaviour. On: keep them
+  // in `routes`, and in the four text-only chains insert any not already present directly before
+  // `"backup"` (in their listing order in `routes`). The worker chain is untouched either way.
+  const apiKeys = Object.keys(cfg.routes).filter((k) => cfg.routes[k]?.provider === "api");
+  const apiOn = cfg.api?.enabled === true;
+  if (apiOn) {
+    for (const role of ["planner", "researcher", "reviewer", "final_reviewer"]) {
+      const chain = cfg.chains[role];
+      if (!Array.isArray(chain)) continue;
+      const already = new Set(chain);
+      const added = apiKeys.filter((k) => !already.has(k));
+      if (added.length === 0) continue;
+      const at = chain.indexOf("backup");
+      cfg.chains[role] = at > 0 ? [...chain.slice(0, at), ...added, ...chain.slice(at)] : [...chain, ...added];
+    }
+  } else if (apiKeys.length > 0) {
+    const dropped = new Set(apiKeys);
+    const next = {};
+    for (const [k, v] of Object.entries(cfg.routes)) if (!dropped.has(k)) next[k] = v;
+    cfg.routes = next;
+    for (const [role, chain] of Object.entries(cfg.chains)) {
+      cfg.chains[role] = Array.isArray(chain) ? chain.filter((k) => !dropped.has(k)) : chain;
+    }
+  }
+  return cfg;
 }
