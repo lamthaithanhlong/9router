@@ -214,6 +214,104 @@ Register a second, read-only tool next to `jev_run`:
   for free.
 - Register it only when `cfg.cost.enabled`.
 
+## Part D — the Cursor question, answered by codex and deepseek
+
+Background the owner measured: the `cursor` route (`router9/cursor-workers`,
+resolved to `jg/claude-sonnet-5`) can answer **HTTP 200 with no text at all**, an
+`ERROR_NOT_LOGGED_IN` carried inside the stream. 9Router records it as
+`[Empty streaming response]` and calls it a success. The plugin already treats an
+empty reply as a failed route, but a child still waits ~70 s before that verdict
+(observed: `worker-1 ended with aborted` after 1638 s), and the `backup` route
+that follows returns 14-16 tokens, which is useless. So the answer to "does Cursor
+return anything?" must be obtained **before** a child is committed to it, and the
+work must not depend on Cursor at all.
+
+### D1. New file `plugin/jev-orchestrator/lib/probe.js`
+
+```js
+export function createProbe(cfg, { log = () => {} } = {}) {
+  // returns { probe(routeKey) }
+}
+```
+
+`probe(routeKey)` -> `{ ok, ms, chars, sample, reason, at }`.
+
+- One direct HTTP `POST` to `cfg.probe.baseUrl` + `/v1/chat/completions`
+  (default baseUrl `http://127.0.0.1:20128`), body
+  `{"model": <the route's 9Router model>, "messages":[{"role":"user","content":"Reply with the single word: PONG"}], "max_tokens":8, "stream":false}`.
+- Auth: `Authorization: Bearer ${process.env.ROUTER9_API_KEY}` when that variable
+  is set, otherwise `x-9r-cli-token: <same token watch/cost use>`.
+- `AbortSignal.timeout(cfg.probe.timeoutMs)` (default `15000`).
+- **`ok` is true only when the reply text matches `/PONG/i`.** A 200 with empty
+  or unrelated text is a failure — that is the whole point, since 9Router reports
+  the empty case as success.
+- Per-route cache for `cfg.probe.ttlMs` (default `300000`); a failed probe also
+  puts the route into the existing `RouteHealth` cooldown.
+- Never throws: any error becomes `{ ok: false, reason }`.
+- Config block:
+
+  ```js
+  probe: { enabled: true, baseUrl: "http://127.0.0.1:20128", timeoutMs: 15000, ttlMs: 300000 },
+  ```
+
+- Mark the routes that need it, in `DEFAULTS.routes`: `cursor` and `manager` get
+  `probe: true`. Nothing else does — codex, deepseek and backup answer when they
+  answer, and a probe on them would cost quota or money for no information.
+
+### D2. The pipeline asks before it commits a child
+
+In `lib/pipeline.js`, before starting a child on a route whose definition has
+`probe: true`: call `probe(route.key)`. When `ok` is false, treat the route as
+cooling, take the next affordable route on the chain, and write a step line such
+as `probe cursor-workers: empty reply (200, 0 chars) - skipped, cooled 10m`.
+When every route on the chain is out, the existing hold path reports it. With
+Part A's cost caps this means a `jev_run` can no longer spend 27 minutes waiting
+for a route that was never going to answer.
+
+### D3. Cross-check — "both of them look and report"
+
+New config:
+
+```js
+review: { crossCheck: ["codex", "deepseek"], onDisagree: "awaiting_human" },
+```
+
+After the primary reviewer returns a verdict, if `crossCheck` is non-empty run the
+**other** named routes as second opinions on the same plan + diff. Each verdict is
+recorded in the trace with its route key and shown in the report as
+
+```
+Review: codex-head -> approve (1 note) | deepseek-v4.1-flash -> changes (2 notes) -> DISAGREE
+```
+
+`awaiting_human` is forced on disagreement when `onDisagree` says so; a diff is
+never merged on a split verdict. A second opinion that could not be obtained
+(route out of budget, probe failed) is reported as `unavailable`, not as a
+disagreement.
+
+### D4. One tool call to run the whole check
+
+Register `jev_probe` next to `jev_run`, taking no parameters. It probes every
+route that appears on any chain and prints one table:
+
+```
+route          model                    cost    alive   ms     sample
+codex          codex-head               quota   yes     812    PONG
+deepseek       deepseek-v4.1-flash      money   yes     640    PONG
+cursor         cursor-workers           free    NO      2210   "" (empty 200)
+backup         backup-free              free    yes     1990   PONG
+```
+
+It uses the same cached `probe()` as the pipeline, so a `jev_probe` immediately
+before a `jev_run` makes the run's own probes free. This is the single call that
+answers "thằng cursor có trả về không".
+
+### D5. Reporting stays free
+
+Every probe result, every cap decision and every review verdict goes through
+Part B's `step()` feed, so `jev_watch` and `watch.mjs` show it without a model
+call. That is what the owner reads to decide whether to loosen a permission.
+
 ## Part C — version, changelog, tests
 
 - `plugin/jev-orchestrator/package.json`: version `0.7.0`.
@@ -242,6 +340,15 @@ Register a second, read-only tool next to `jev_run`:
     `awaiting_human` with a reason containing `cost:` and starts no further
     child; with `cost.callUsd` tiny, a role falls to the next route on its chain
     instead of using the over-cap one.
+  - `probe.test.mjs`: a stubbed fetch that returns `PONG` gives `ok: true`; a 200
+    with `""` gives `ok: false` with a reason naming the empty reply; a request
+    that never resolves becomes `ok: false` at the timeout; a second `probe()` of
+    the same route within `ttlMs` performs no second HTTP call; a failed probe
+    makes the next route selection skip that route.
+  - extend `pipeline.test.mjs` for Part D: a worker chain whose first route probes
+    dead starts its child on the second route, and the run's trace records the
+    `unavailable`/skipped route; with `review.crossCheck` naming two routes, both
+    verdicts appear in the report, and a split verdict yields `awaiting_human`.
 
 ## Definition of done
 
@@ -250,3 +357,5 @@ Register a second, read-only tool next to `jev_run`:
 3. `grep -n "0.7.0" plugin/jev-orchestrator/package.json CHANGELOG.md` shows both.
 4. No new entry in `dependencies`/`devDependencies` anywhere.
 5. `watch.mjs` reads no token or cost value from `requestDetails`.
+6. `worker` never starts a child on a route whose `probe` is `true` and whose
+   probe did not answer `PONG` inside `probe.timeoutMs`.
