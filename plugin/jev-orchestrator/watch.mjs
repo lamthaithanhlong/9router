@@ -24,6 +24,8 @@ const once = argv.includes("--once");
 const pollMs = Number(argv[argv.indexOf("--poll") + 1]) || 2000;
 
 const stamp = (t) => new Date(t).toISOString().slice(11, 19);
+// Older than today: say which day, or 09:00 yesterday reads as 09:00 now.
+const stampDay = (t) => (new Date(t).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? stamp(t) : new Date(t).toISOString().slice(5, 19).replace("T", " "));
 const line = (s) => process.stdout.write(s + "\n");
 
 // --- 1. 9Router usageHistory --------------------------------------------------
@@ -37,6 +39,16 @@ try {
 }
 let lastUsageId = 0;
 let runningTotal = 0;
+// Start at the tail, not at row 1: usageHistory holds days of calls, and replaying the oldest 50 as if
+// they were live (time-only stamps, no date) made a run from yesterday look like it was happening now.
+// --once shows the last few calls; follow mode shows only what arrives after it starts.
+if (db) {
+  try {
+    const tail = once ? 20 : 0;
+    const r = db.prepare("SELECT COALESCE(MAX(id), 0) - ? AS id FROM usageHistory").get(tail);
+    lastUsageId = Math.max(0, Number(r?.id) || 0);
+  } catch { /* table missing: pollRouter handles it */ }
+}
 
 function pollRouter() {
   if (!db) return;
@@ -53,7 +65,7 @@ function pollRouter() {
     runningTotal += cost;
     const pt = Number(r.promptTokens) || 0;
     const ct = Number(r.completionTokens) || 0;
-    line(`${stamp(Date.parse(r.timestamp) || Date.now())}  call   ${String(r.provider).padEnd(11)} ${String(r.model).padEnd(22)} $${cost.toFixed(4)}  ${pt}/${ct} tok`);
+    line(`${stampDay(Date.parse(r.timestamp) || Date.now())}  call   ${String(r.provider).padEnd(11)} ${String(r.model).padEnd(22)} $${cost.toFixed(4)}  ${pt}/${ct} tok`);
   }
   if (runningTotal > 0 && rows.length) {
     line(`${stamp(Date.now())}  total  $${runningTotal.toFixed(4)} since this watcher started`);
