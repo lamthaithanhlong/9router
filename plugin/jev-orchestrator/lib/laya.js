@@ -32,8 +32,18 @@ export function isLoopback(url) {
 // Every failure returns null so the caller falls back to its rules; a down Jev
 // never blocks a run. When the LOCAL source is unreachable it is started in the
 // background (laya-ctl start), at most once per cooldown.
+// A hosted endpoint that answers "you are out of quota" must not be asked again
+// today: the ledger's own cap is an estimate of the plan, and when the plan stops
+// earlier every further attempt is a wasted round-trip and a slower run.
+export function isQuotaError(status, bodyText = "") {
+  if (status === 402 || status === 429) return true;
+  return /quota|insufficient|exceeded|balance|credit/i.test(String(bodyText).slice(0, 400));
+}
+
 export function createLaya(cfg, { fetchImpl = globalThis.fetch, spawnImpl = spawn, log = () => {}, now = Date.now, env = process.env, readFile } = {}) {
   let lastStart = -Infinity;
+  let hostedExhaustedDay = null; // UTC day on which the hosted route said "no quota"
+  const utcDay = () => new Date(now()).toISOString().slice(0, 10);
 
   function ensureUp(url) {
     if (!isLoopback(url)) return;
@@ -62,7 +72,15 @@ export function createLaya(cfg, { fetchImpl = globalThis.fetch, spawnImpl = spaw
       }),
       signal: AbortSignal.timeout(cfg.timeoutMs),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      let body = "";
+      try { body = await res.text(); } catch { /* the status alone is enough */ }
+      if (key && isQuotaError(res.status, body)) {
+        hostedExhaustedDay = utcDay();
+        log(`laya: hosted quota is spent for ${hostedExhaustedDay}; the local engine answers until tomorrow`);
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
     const payload = await res.json();
     const answer = payload?.answers?.[id];
     if (answer?.type !== "noul" || typeof answer.noul !== "number") throw new Error("no noul answer");
@@ -77,7 +95,9 @@ export function createLaya(cfg, { fetchImpl = globalThis.fetch, spawnImpl = spaw
   // instead of the run losing its Jev answer altogether.
   async function noul(id, state, instructions, onUsage, opts = {}) {
     if (!cfg.enabled) return null;
-    const secret = opts.cloud === false ? null : resolveSecret({ keyEnv: cfg.keyEnv, keyFile: cfg.keyFile }, { env, readFile });
+    if (hostedExhaustedDay && hostedExhaustedDay !== utcDay()) hostedExhaustedDay = null; // a new day restores it
+    const cloudByQuota = opts.cloud !== false && !hostedExhaustedDay;
+    const secret = cloudByQuota ? resolveSecret({ keyEnv: cfg.keyEnv, keyFile: cfg.keyFile }, { env, readFile }) : null;
     const attempts = secret
       ? [{ url: cfg.url, key: secret.value }, ...(cfg.fallbackUrl ? [{ url: cfg.fallbackUrl, key: null }] : [])]
       : [{ url: cfg.fallbackUrl || cfg.url, key: null }];

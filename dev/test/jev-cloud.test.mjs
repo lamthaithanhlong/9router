@@ -195,3 +195,34 @@ test("pipeline: a local fallback answer does not consume the hosted question quo
   assert.equal(entry.source, "local");
   assert.equal(entry.tokensIn, undefined);
 });
+
+test("laya: a hosted 429 marks the route spent for the day and stops asking it", async () => {
+  const cfg = { ...DEFAULTS.laya, keyEnv: "TS_TEST_KEY", keyFile: "" };
+  const seen = [];
+  let day = Date.parse("2026-10-07T10:00:00Z");
+  const laya = createLaya(cfg, {
+    env: { TS_TEST_KEY: SECRET },
+    now: () => day,
+    fetchImpl: async (url) => {
+      seen.push(url);
+      if (url.startsWith("https://")) return { ok: false, status: 429, async text() { return '{"error":{"message":"quota exceeded"}}'; } };
+      return { ok: true, json: async () => ({ answers: { q: { type: "noul", noul: 0.3 } } }) };
+    },
+  });
+  assert.equal(await laya.noul("q", "s", "i"), 0.3);              // cloud 429 -> local answers
+  assert.equal(seen.filter((u) => u.startsWith("https://")).length, 1);
+  assert.equal(await laya.noul("q", "s", "i"), 0.3);              // no second cloud attempt
+  assert.equal(seen.filter((u) => u.startsWith("https://")).length, 1, "the spent route must not be retried");
+  day += 86_400_000;                                              // next UTC day: try the cloud again
+  assert.equal(await laya.noul("q", "s", "i"), 0.3);
+  assert.equal(seen.filter((u) => u.startsWith("https://")).length, 2, "a new day restores the hosted attempt");
+});
+
+test("laya: isQuotaError only fires on quota-shaped failures", async () => {
+  const { isQuotaError } = await import("../../plugin/jev-orchestrator/lib/laya.js");
+  assert.equal(isQuotaError(429, ""), true);
+  assert.equal(isQuotaError(402, ""), true);
+  assert.equal(isQuotaError(403, '{"error":"insufficient balance"}'), true);
+  assert.equal(isQuotaError(500, "internal error"), false);
+  assert.equal(isQuotaError(400, "bad request"), false);
+});

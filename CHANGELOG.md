@@ -13,6 +13,21 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-10-07
+
+### Added
+- **`watch.mjs` - a live, free view of a run.** It tails 9Router's request log (every child call with latency,
+  tokens and status), the ledger (the day's spend per route) and `jev-runs.jsonl` (finished runs). All three are
+  written by tools that ran anyway, so watching costs no model call and no quota: `node watch.mjs` to follow,
+  `--once` for the recent history.
+
+### Changed
+- **The hosted-question cap is now 70 per UTC day** (the owner's number) instead of 50.
+- **A hosted "out of quota" answer marks the route spent for the rest of the UTC day.** The ledger cap can only
+  estimate a plan; when the plan stops earlier, `isQuotaError` (402/429, or a quota/balance/credit message) trips
+  a circuit breaker in `lib/laya.js` and every later question goes straight to the free local engine. One failed
+  round-trip per day instead of one per question. A new UTC day restores the hosted attempt.
+
 ## [0.6.4] - 2026-10-07
 
 ### Changed
