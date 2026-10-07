@@ -13,6 +13,12 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+### Fixed
+- **A cancelled or crashed run showed RUNNING on the dashboard until the next run replaced it.** Only a successful
+  run wrote a closing step line, so the head node pulsed and the tag read RUNNING long after the worker said
+  "cancelled". A failed run now writes `run ended: <error>` (status `error`), and the dashboard also closes any run
+  the run log says has ended, which fixes runs that were cancelled before this change.
+
 ## [0.7.7] - 2026-10-07
 
 ### Added

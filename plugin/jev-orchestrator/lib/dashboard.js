@@ -45,19 +45,25 @@ export function currentRun(steps, runs) {
   const mine = steps.filter((s) => s.run === last.run);
   if (!mine.length) return null;
   const startedAt = mine[0].ts ?? null;
-  const doneLine = [...mine].reverse().find((s) => /^run done/.test(s.text ?? ""));
+  const doneLine = [...mine].reverse().find((s) => /^run (done|ended)/.test(s.text ?? ""));
   const endedAt = doneLine?.ts ?? null;
   const run = {
     id: last.run,
     startedAt,
     endedAt,
-    status: doneLine ? (doneLine.status ?? "done") : "running",
+    status: doneLine ? (doneLine.status ?? (/^run ended/.test(doneLine.text) ? "error" : "done")) : "running",
     cwd: null,
     task: null,
     usd: 0,
     stages: [],
   };
   const logged = [...(runs ?? [])].reverse().find((r) => r.ts && startedAt && r.end && r.ts <= startedAt && r.end >= startedAt);
+  // Runs that ended before the closing line existed (or whose process died) have none: the run log, written in
+  // a finally, still says when and how they ended.
+  if (!doneLine && logged) {
+    run.status = logged.status ?? "error";
+    run.endedAt = logged.end;
+  }
   const source = logged ?? runs?.at(-1) ?? null;
   if (source) {
     run.cwd = source.cwd ?? null;

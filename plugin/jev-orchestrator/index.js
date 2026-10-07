@@ -222,6 +222,9 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         return text;
       } catch (err) {
         error = err.message;
+        // A cancelled or crashed run used to write no closing line, so the dashboard showed it RUNNING until the
+        // next run replaced it (seen 2026-10-07 after a cancel: the card said running, the worker said cancelled).
+        steps.step(`run ended: ${String(err.message ?? err).slice(0, 120)}`, { run: stamp, status: "error", usd: cost?.taskUsd() ?? 0 });
         throw err;
       } finally {
         recordRun(expandHome(cfg.runLog), {

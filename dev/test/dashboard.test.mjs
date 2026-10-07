@@ -50,6 +50,21 @@ test("stagesOf: a started line with no finish line is still running", () => {
   assert.equal(stages[0].endedAt, null);
 });
 
+test("currentRun: a run that was cancelled is not shown as running forever", () => {
+  const T0 = "2026-10-07T19:27:22.633Z";
+  const body = [{ ts: T0, run: "x", text: "run started" }, { ts: T0, run: "x", text: "worker-1 started on deepseek", role: "worker", label: "worker-1" }];
+  // new runs write a closing line
+  const ended = currentRun([...body, { ts: "2026-10-07T19:27:52.830Z", run: "x", text: "run ended: run cancelled", status: "error" }], []);
+  assert.equal(ended.status, "error");
+  assert.ok(ended.endedAt);
+  // old runs have none: the run log (written in a finally) closes them
+  const legacy = currentRun(body, [{ ts: T0, end: "2026-10-07T19:27:52.830Z", status: "error", task: "t", cwd: "/r" }]);
+  assert.equal(legacy.status, "error");
+  assert.equal(legacy.endedAt, "2026-10-07T19:27:52.830Z");
+  // a genuinely live run (no log entry yet) is still running
+  assert.equal(currentRun(body, [{ ts: "2026-10-07T18:00:00.000Z", end: "2026-10-07T18:05:00.000Z", status: "done" }]).status, "running");
+});
+
 test("currentRun: finds the live run, and closes it on the run-done line", () => {
   const S = (o) => ({ ts: T, run: "abc", text: "", ...o });
   const open = [S({ text: "run started" }), S({ text: "planner started on codex" })];
