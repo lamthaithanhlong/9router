@@ -13,6 +13,23 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-07
+
+### Added
+- **A route that is dropped now says why** (`lib/roles.js`, `lib/pipeline.js`). `resolveRole` returns
+  `skipped: [{ key, why }]` for every chain entry it refused - missing from the config, failed earlier
+  in this call, cooling down after a failure, or out of budget with the numbers
+  (`needs 4200 tokens, has 0 left`). The pipeline writes one step-feed line per refusal, so
+  `jev_watch`, `watch.mjs` and the dashboard show it for free.
+
+### Measured
+This is not hypothetical. On 2026-10-07 a worker stage went to Cursor (290s, no output) and then to
+backup (52s, no output) while `deepseek`, the FIRST entry of the worker chain, was never offered at
+all and nothing on disk said why; the same silent drop happened under 0.7.1. A full-fidelity
+reproduction (real config, real ledger, real cost tracker, real prompt files) picks `deepseek`
+correctly, so the difference lives in the running process's own state - which is exactly what was
+invisible. It is not invisible any more.
+
 ## [0.7.2] - 2026-10-07
 
 ### Fixed

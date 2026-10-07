@@ -24,12 +24,20 @@ async function runAgent(deps, role, message, label, opts = {}) {
   const attempts = [];
   for (;;) {
     const res = resolveRole(role, cfg, deps.ledger, need, { skip, health: deps.health, rotation: deps.rotation });
+    // Every chain entry that was refused is written down, with its reason. A route that vanishes
+    // without a word is how a worker call ended up on Cursor for 290s while `deepseek`, the chain's
+    // first entry, was never offered at all (2026-10-07). The owner must never have to guess.
+    const reasonLines = (res.skipped ?? []).map((s) => {
+      const line = `${role}: skipped ${s.key} (${s.why})`;
+      deps.steps?.step(line, { run: deps.runId, role, route: s.key, skipped: true, taskUsd: deps.cost?.taskUsd() ?? 0 });
+      return line;
+    });
     if (res.kind === "hold") {
       const reason = skip.length ? `${role}: every route failed or is out of budget (${attempts.join("; ")})` : res.reason;
-      return { status: "held", reason };
+      return { status: "held", reason: reasonLines.length ? `${reason} [${reasonLines.join("; ")}]` : reason };
     }
     const { route } = res;
-    deps.log(`${role} -> ${route.key}${route.via ? ` (via ${route.via}, turn ${route.turn})` : ""}${res.fellBack ? " (fallback)" : ""}`);
+    deps.log(`${role} -> ${route.key}${route.via ? ` (via ${route.via}, turn ${route.turn})` : ""}${res.fellBack ? " (fallback)" : ""}${reasonLines.length ? ` (${reasonLines.length} skipped)` : ""}`);
 
     // Part D: ask a known-flaky route whether it answers at all, before spending a child on it.
     // The Cursor route can return HTTP 200 with no text; a child that discovers that the slow way

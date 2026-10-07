@@ -21,6 +21,7 @@ import { NAME, expandHome, resolveConfig } from "./lib/config.js";
 import { formatReport, runPipeline } from "./lib/pipeline.js";
 import { recordRun } from "./lib/runlog.js";
 import { createQueue, idSource } from "./lib/queue.js";
+import { cfoLine } from "./lib/telemetry.js";
 
 // package.json is the single source of truth for the version.
 function readVersion() {
@@ -250,8 +251,15 @@ export function buildWatchTool(ctx, cfg, ledger, log = () => {}, cost) {
       const limit = Number.isFinite(args.lines) ? Math.max(1, Math.min(500, args.lines)) : 30;
       const stamp = (t) => new Date(t).toISOString().slice(11, 19);
       const out = [];
+      // 0. CFO block — three-line header the dashboard (`ui.mjs`) and this CLI share.
+      try {
+        const cfo = await cfoLine(cfg, ledger.load());
+        out.push(...cfo);
+      } catch (err) {
+        out.push(`CFO: (unavailable: ${err.message})`);
+      }
       // 1. Step feed (newest last). Parse the JSON line so we can pick a friendly text and the timestamp.
-      out.push(`Steps (${escape(sinceFileName(stepsFile))}):`);
+      out.push("", `Steps (${escape(sinceFileName(stepsFile))}):`);
       try {
         const raw = readFileSync(stepsFile, "utf8");
         const entries = raw.split("\n").filter(Boolean).slice(-limit);

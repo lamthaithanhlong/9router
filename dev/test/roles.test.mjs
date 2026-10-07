@@ -19,7 +19,12 @@ const cfg = () => ({
   budgets: {},
 });
 
-const ledger = (out = []) => ({ canSpend: (key) => !out.includes(key), charge() {} });
+const ledger = (out = [], left = {}) => ({
+  canSpend: (key) => !out.includes(key),
+  remaining: (k) => (k in left ? left[k] : Infinity),
+  budgets: { codex: { unit: "calls" }, deepseek: { unit: "tokens" } },
+  charge() {},
+});
 const health = (cooling = []) => ({ cooling: (k) => cooling.includes(k), ok() {}, fail() {} });
 
 test("a seat is a definition with rotate, and a member is never itself a seat", () => {
@@ -113,6 +118,34 @@ test("a plain chain is untouched by the seat logic", () => {
   // The seat counter store is optional: a caller with no rotation still gets a working route.
   const seat = resolveRole("planner", c, ledger(), 100, {});
   assert.equal(seat.route.key, "codex");
+});
+
+test("a refused chain entry carries the reason, so it can never vanish silently", () => {
+  // Measured 2026-10-07: a worker call went to Cursor and hung 290s while `deepseek`, the chain's
+  // first entry, was never offered and NOTHING on disk said why. That is the failure this pins down.
+  const c = cfg();
+  const r = resolveRole("worker", c, ledger(["deepseek"], { deepseek: 0 }), 4200, { rotation: new Map() });
+  assert.equal(r.route.key, "cursor", "cursor has no budget entry, so it is affordable");
+  assert.equal(r.fellBack, true);
+  assert.deepEqual(r.skipped, [{ key: "deepseek", why: "out of budget (needs 4200 tokens, has 0 left)" }]);
+
+  // The same visibility inside a seat: which member was stepped over, and why.
+  const seat = resolveRole("planner", c, ledger(["codex"], { codex: 0 }), 500, { rotation: new Map() });
+  assert.equal(seat.route.key, "deepseek");
+  assert.deepEqual(seat.skipped, [{ key: "manager->codex", why: "out of budget (needs 500 calls, has 0 left)" }]);
+
+  // A route that is not in the config at all says so instead of pretending it never existed.
+  const broken = cfg();
+  broken.routes = { ...broken.routes, backup: undefined };
+  const gone = resolveRole("worker", broken, ledger(["deepseek"]), 100, { rotation: new Map() });
+  assert.equal(gone.kind, "route");
+  assert.ok(gone.skipped.some((s) => s.key === "backup" && s.why === "no such route in config"));
+});
+
+test("an empty skipped list means every entry was offered as usual", () => {
+  const r = resolveRole("worker", cfg(), ledger(), 100, { rotation: new Map() });
+  assert.deepEqual(r.skipped, []);
+  assert.equal(r.route.key, "deepseek");
 });
 
 test("pickSeatMember: reports the turn and refuses a seat whose members are all seats or missing", () => {
