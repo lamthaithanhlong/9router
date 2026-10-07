@@ -100,12 +100,9 @@ async function askLaya(deps, id, state, instructions) {
   // Metered: the hosted Jev is charged per input token, so the daily cap must be
   // checked BEFORE the call, and the real usage charged after it.
   const estimate = estimateTokens(state) + 128;
-  if (deps.ledger?.canSpend && !deps.ledger.canSpend("laya", estimate, "laya")) {
-    deps.trace.push({ role: "laya", label: id, key: "laya", provider: "laya", model: "systemone", status: "skipped", detail: "daily token cap reached", ms: 0 });
-    return null;
-  }
+  const cloudAllowed = !deps.ledger?.canSpend || deps.ledger.canSpend("laya", estimate, "laya");
   let usage = null;
-  const p = await deps.laya.noul(id, state, instructions, (u) => { usage = u; });
+  const p = await deps.laya.noul(id, state, instructions, (u) => { usage = u; }, { cloud: cloudAllowed });
   // Only the hosted endpoint consumes the daily question quota; the local engine is
   // free and unlimited, so a fallback answer must not be charged.
   const charged = usage?.source === "cloud";
@@ -115,6 +112,7 @@ async function askLaya(deps, id, state, instructions) {
     status: p === null ? "unavailable" : "ok", detail: p, ms: Date.now() - t0,
     ...(charged && Number.isFinite(usage?.inputTokens) ? { tokensIn: usage.inputTokens } : {}),
     ...(usage?.source ? { source: usage.source } : {}),
+    ...(cloudAllowed ? {} : { detail2: "daily question quota spent: answered locally" }),
   });
   return p;
 }

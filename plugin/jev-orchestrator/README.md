@@ -20,7 +20,8 @@ DeepSeek Harness plugin. One tool, `jev_run`, runs a coding task through cost-aw
   and falls back to the free local `laya-serve` (`laya.fallbackUrl`) when no key resolves or the hosted call fails.
   A cloud URL never starts the local engine; only a loopback URL may. The hosted route is capped at
   `budgets.laya` questions per UTC day (default 50, the plan's quota) — counted in CALLS, checked before the
-  request — and a local answer costs nothing, so a fallback never spends the quota.
+  request. Once that quota is spent the question goes to the free local engine instead of being skipped, so
+  heavy days keep working at no cost.
 - Laya down means the rules alone decide, and the report says so. When the local engine is unreachable the plugin starts it in the background through `~/.local/bin/laya-ctl` (at most once per 5 minutes).
 - A role moves to the next route of its chain when a route is out of budget or its child fails; the last route is always `backup`. A failed route is skipped for 10 minutes. A risky diff approved only by backup reviewers still waits for a person (`backupPolicy.reviewIsFinal`).
 - At most 3 children run at once on Cursor (`cursor-workers` and `manager-temp` share that cap) and starts are 2 s apart, across all `jev_run` calls; extra sub-tasks queue, and a call with more than 6 sub-tasks or 3 research questions is refused. Tune with `limits.concurrency`, `limits.startGapMs`, `limits.maxTasks`.

@@ -13,6 +13,14 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-07
+
+### Changed
+- **When the day's hosted-quota is spent the free local engine answers the question instead of the run losing
+  it.** `budgets.laya` still caps the *hosted* questions at 50 per UTC day, but the 51st question is now put to
+  `laya.fallbackUrl` (`opts.cloud === false`, `source: local`) rather than skipped, so a day with heavy use
+  keeps its Jev answer at no cost. Only hosted answers are charged.
+
 ## [0.6.3] - 2026-10-07
 
 ### Changed

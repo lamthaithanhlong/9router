@@ -71,10 +71,13 @@ export function createLaya(cfg, { fetchImpl = globalThis.fetch, spawnImpl = spaw
   }
 
   // Probability (0..1) that the answer to a yes/no question is yes, or null.
-  // `onUsage` receives {inputTokens} for the call that answered, when it reports it.
-  async function noul(id, state, instructions, onUsage) {
+  // `onUsage` receives {inputTokens, model, source} for the call that answered.
+  // `opts.cloud === false` skips the hosted endpoint entirely: the caller uses it
+  // when the day's paid quota is gone, so the free local engine keeps answering
+  // instead of the run losing its Jev answer altogether.
+  async function noul(id, state, instructions, onUsage, opts = {}) {
     if (!cfg.enabled) return null;
-    const secret = resolveSecret({ keyEnv: cfg.keyEnv, keyFile: cfg.keyFile }, { env, readFile });
+    const secret = opts.cloud === false ? null : resolveSecret({ keyEnv: cfg.keyEnv, keyFile: cfg.keyFile }, { env, readFile });
     const attempts = secret
       ? [{ url: cfg.url, key: secret.value }, ...(cfg.fallbackUrl ? [{ url: cfg.fallbackUrl, key: null }] : [])]
       : [{ url: cfg.fallbackUrl || cfg.url, key: null }];

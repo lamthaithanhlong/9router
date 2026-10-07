@@ -147,15 +147,34 @@ test("pipeline: the Jev call is metered, and the daily cap skips it instead of s
   assert.equal(ledger.used("laya"), 1, "one hosted question costs one unit, whatever its token count");
   assert.equal(ledger.remaining("laya"), DEFAULTS.budgets.laya.daily - 1);
 
-  // Over the cap: it must not be asked at all.
-  for (let i = 0; i < DEFAULTS.budgets.laya.daily; i += 1) ledger.charge("laya", 0);
-  let askedAgain = false;
-  const deps2 = { ...deps, trace: [], laya: { noul: async () => { askedAgain = true; return 0.9; } } };
+  // Over the quota: the hosted endpoint must not be used for the rest of the day.
+  while (ledger.canSpend("laya", 1, "laya")) ledger.charge("laya", 0);
+  const spentBefore = ledger.used("laya");
+  let askedOpts = null;
+  const deps2 = {
+    ...deps, trace: [],
+    laya: { noul: async (id, state, instructions, onUsage, opts) => { askedOpts = opts; onUsage?.({ inputTokens: 0, source: "local" }); return 0.9; } },
+  };
   await runPipeline(deps2, input);
-  assert.equal(askedAgain, false, "the cap must stop the call before it happens");
+  assert.deepEqual(askedOpts, { cloud: false }, "the cap must forbid the hosted call, not the local one");
+  // Over the quota the cloud is skipped, but the free local engine still answers,
+  // so a day never loses its plan decision just because the quota ran out.
   const entry = deps2.trace.find((t) => t.role === "laya");
-  assert.equal(entry.status, "skipped");
-  assert.match(String(entry.detail), /cap/);
+  assert.equal(entry.status, "ok");
+  assert.equal(entry.source, "local");
+  assert.match(String(entry.detail2), /quota spent/);
+  assert.equal(ledger.used("laya"), spentBefore, "a local answer adds nothing to the quota");
+});
+
+test("laya: opts.cloud === false never touches the hosted endpoint", async () => {
+  const cfg = { ...DEFAULTS.laya, keyEnv: "TS_TEST_KEY", keyFile: "" };
+  const seen = [];
+  const laya = createLaya(cfg, {
+    env: { TS_TEST_KEY: SECRET },
+    fetchImpl: async (url, init) => { seen.push(url); return { ok: true, json: async () => ({ answers: { q: { type: "noul", noul: 0.2 } } }) }; },
+  });
+  assert.equal(await laya.noul("q", "s", "i", null, { cloud: false }), 0.2);
+  assert.deepEqual(seen, ["http://127.0.0.1:8130/v1/systemone"]);
 });
 
 test("pipeline: a local fallback answer does not consume the hosted question quota", async () => {
