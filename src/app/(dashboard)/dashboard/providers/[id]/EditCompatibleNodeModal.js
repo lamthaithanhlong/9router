@@ -10,6 +10,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
     prefix: "",
     apiType: "chat",
     baseUrl: "https://api.openai.com/v1",
+    extraHeaders: "",
   });
   const [saving, setSaving] = useState(false);
   const [checkKey, setCheckKey] = useState("");
@@ -24,6 +25,10 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         prefix: node.prefix || "",
         apiType: node.apiType || "chat",
         baseUrl: node.baseUrl || (isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"),
+        // Stored as an object; the textarea edits the "Name: Value" text form.
+        extraHeaders: Object.entries(node.extraHeaders || {})
+          .map(([name, value]) => `${name}: ${value}`)
+          .join("\n"),
       });
     }
   }, [node, isAnthropic]);
@@ -41,6 +46,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         name: formData.name,
         prefix: formData.prefix,
         baseUrl: formData.baseUrl,
+        extraHeaders: formData.extraHeaders,
       };
       if (!isAnthropic) {
         payload.apiType = formData.apiType;
@@ -61,7 +67,8 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
           baseUrl: formData.baseUrl,
           apiKey: checkKey,
           type: isAnthropic ? "anthropic-compatible" : "openai-compatible",
-          modelId: checkModelId.trim() || undefined
+          modelId: checkModelId.trim() || undefined,
+          extraHeaders: formData.extraHeaders,
         }),
       });
       const data = await res.json();
@@ -107,6 +114,21 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
           placeholder={isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"}
           hint={`Use the base URL (ending in /v1) for your ${isAnthropic ? "Anthropic" : "OpenAI"}-compatible API.`}
         />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-text-main">Extra Headers</label>
+          <textarea
+            rows={3}
+            value={formData.extraHeaders}
+            onChange={(e) => setFormData({ ...formData, extraHeaders: e.target.value })}
+            placeholder={"x-jg-auth: <token>\nX-Tenant: acme"}
+            spellCheck={false}
+            className="w-full py-2.5 px-3 text-sm text-text-main bg-surface-2 rounded-[10px] border border-transparent placeholder-text-muted/70 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/40 transition-all duration-150 ease-out font-mono"
+          />
+          <p className="text-xs text-text-muted">
+            Optional. One <code>Name: Value</code> per line, sent with every upstream request.
+            Reserved headers (Host, Content-Length, Connection, ...) are refused.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Input
             label="API Key (for Check)"

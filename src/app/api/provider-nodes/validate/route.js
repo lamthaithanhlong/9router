@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPublicUrl } from "@/shared/utils/ssrfGuard.js";
 import { isLocalRequest } from "@/dashboardGuard";
+import { resolveExtraHeaders } from "@/shared/utils/extraHeaders";
 
 // Fetch with timeout wrapper
 const fetchWithTimeout = (url, options, timeout = 10000) => {
@@ -56,6 +57,9 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { baseUrl, apiKey, type, modelId } = body;
+    // Same headers the node will send at request time, so "Check" tells the
+    // truth for gateways that authenticate with a custom header.
+    const extraHeaders = resolveExtraHeaders(body.extraHeaders);
 
     if (!baseUrl || !apiKey) {
       return NextResponse.json({ error: "Base URL and API key required" }, { status: 400 });
@@ -118,7 +122,8 @@ export async function POST(request) {
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
-          "Authorization": `Bearer ${apiKey}`
+          "Authorization": `Bearer ${apiKey}`,
+          ...extraHeaders
         }
       });
 
@@ -137,7 +142,8 @@ export async function POST(request) {
             "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json",
             "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01"
+            "anthropic-version": "2023-06-01",
+            ...extraHeaders
           },
           body: JSON.stringify({
             model: modelId,
@@ -161,7 +167,7 @@ export async function POST(request) {
     // OpenAI Compatible Validation (Default)
     const modelsUrl = `${baseUrl.replace(/\/$/, "")}/models`;
     const res = await fetchWithTimeout(modelsUrl, {
-      headers: { "Authorization": `Bearer ${apiKey}` },
+      headers: { "Authorization": `Bearer ${apiKey}`, ...extraHeaders },
     });
 
     if (res.ok) return NextResponse.json({ valid: true });
@@ -177,7 +183,8 @@ export async function POST(request) {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...extraHeaders
         },
         body: JSON.stringify({
           model: modelId,

@@ -55,6 +55,12 @@ export async function getProviderNodeById(id) {
 export async function createProviderNode(data) {
   const db = await getAdapter();
   const now = new Date().toISOString();
+  // extraHeaders is optional and only meaningful for compatible nodes; when the
+  // caller sends nothing we must not persist an empty object (it would show up
+  // in every GET as a meaningless `extraHeaders: {}`).
+  const extraHeaders = data.extraHeaders && typeof data.extraHeaders === "object" && !Array.isArray(data.extraHeaders)
+    ? data.extraHeaders
+    : null;
   const node = {
     id: data.id || uuidv4(),
     type: data.type,
@@ -62,6 +68,7 @@ export async function createProviderNode(data) {
     prefix: data.prefix,
     apiType: data.apiType,
     baseUrl: data.baseUrl,
+    ...(extraHeaders ? { extraHeaders } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -76,6 +83,8 @@ export async function updateProviderNode(id, data) {
     const row = db.get(`SELECT * FROM providerNodes WHERE id = ?`, [id]);
     if (!row) return;
     const merged = { ...rowToNode(row), ...data, updatedAt: new Date().toISOString() };
+    // Explicit null from the dashboard means "remove them again".
+    if (merged.extraHeaders == null) delete merged.extraHeaders;
     upsert(db, merged);
     result = merged;
   });

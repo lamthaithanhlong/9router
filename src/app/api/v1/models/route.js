@@ -12,6 +12,7 @@ import { resolveKiroModels } from "open-sse/services/kiroModels.js";
 import { resolveKimchiModels } from "open-sse/services/kimchiModels.js";
 import { resolveQoderModels, routableQoderModels } from "open-sse/services/qoderModels.js";
 import { resolveCopilotModels } from "open-sse/services/copilotModels.js";
+import { resolveExtraHeaders } from "@/shared/utils/extraHeaders";
 import { resolveClinepassModels, resolveClineModels } from "open-sse/services/clinepassModels.js";
 import { resolveGrokCliModels } from "open-sse/services/grokCliModels.js";
 import { resolveCursorModels } from "open-sse/services/cursorModels.js";
@@ -225,6 +226,10 @@ async function fetchCompatibleModelIds(connection) {
   } else {
     return [];
   }
+
+  // A gateway that authenticates with a custom header would otherwise expose no
+  // models here even though chat works, so discovery must send them too.
+  Object.assign(headers, resolveExtraHeaders(connection?.providerSpecificData?.extraHeaders));
 
   try {
     const controller = new AbortController();

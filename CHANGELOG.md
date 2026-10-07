@@ -1,3 +1,8 @@
+# Unreleased
+
+## Features
+- **Providers**: let OpenAI-/Anthropic-compatible nodes declare extra upstream headers (`extraHeaders`), stored on the node, copied to its connections, merged last in `BaseExecutor.buildHeaders` so a gateway token or tenant id can be sent (and a non-Bearer `Authorization` used). Header names are RFC 7230 tokens, values must stay single-line, and request-framing headers (`Host`, `Content-Length`, `Connection`, ...) are refused; rejected entries are returned to the caller as `extraHeaderErrors`. The Check button and `/v1/models` discovery send the same headers.
+
 # v0.5.95 (2026-10-01)
 
 ## Features

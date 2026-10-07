@@ -9,6 +9,7 @@ import {
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
+import { resolveExtraHeaders } from "@/shared/utils/extraHeaders";
 
 export const dynamic = "force-dynamic";
 
@@ -133,21 +134,25 @@ export async function POST(request) {
       if (!node) {
         return NextResponse.json({ error: "OpenAI Compatible node not found" }, { status: 404 });
       }
+      const extraHeaders = resolveExtraHeaders(node.extraHeaders);
       providerSpecificData = {
         prefix: node.prefix,
         apiType: node.apiType,
         baseUrl: node.baseUrl,
         nodeName: node.name,
+        ...(Object.keys(extraHeaders).length ? { extraHeaders } : {}),
       };
     } else if (isAnthropicCompatibleProvider(provider)) {
       const node = await getProviderNodeById(provider);
       if (!node) {
         return NextResponse.json({ error: "Anthropic Compatible node not found" }, { status: 404 });
       }
+      const extraHeaders = resolveExtraHeaders(node.extraHeaders);
       providerSpecificData = {
         prefix: node.prefix,
         baseUrl: node.baseUrl,
         nodeName: node.name,
+        ...(Object.keys(extraHeaders).length ? { extraHeaders } : {}),
       };
     } else if (isCustomEmbeddingProvider(provider)) {
       const node = await getProviderNodeById(provider);

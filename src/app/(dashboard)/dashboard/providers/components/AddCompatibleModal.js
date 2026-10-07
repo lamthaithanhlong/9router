@@ -41,6 +41,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
     prefix: "",
     ...(config.hasApiType ? { apiType: "chat" } : {}),
     baseUrl: config.defaultBaseUrl,
+    extraHeaders: "",
   });
 
   const [formData, setFormData] = useState(initialFormData);
@@ -49,6 +50,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
   const [checkModelId, setCheckModelId] = useState("");
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+  const [extraHeaderErrors, setExtraHeaderErrors] = useState([]);
 
   // openai: reset baseUrl when apiType changes; anthropic: reset checks when opened
   useEffect(() => {
@@ -74,10 +76,12 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           ...(config.hasApiType ? { apiType: formData.apiType } : {}),
           baseUrl: formData.baseUrl,
           type: config.type,
+          extraHeaders: formData.extraHeaders,
         }),
       });
       const data = await res.json();
       if (res.ok) {
+        setExtraHeaderErrors(data.extraHeaderErrors || []);
         onCreated(data.node);
         setFormData(initialFormData());
         setCheckKey("");
@@ -101,6 +105,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           apiKey: checkKey,
           type: config.type,
           modelId: checkModelId.trim() || undefined,
+          extraHeaders: formData.extraHeaders,
         }),
       });
       const data = await res.json();
@@ -165,6 +170,24 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           placeholder={config.defaultBaseUrl}
           hint={config.baseUrlHint}
         />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-text-main">Extra Headers</label>
+          <textarea
+            rows={3}
+            value={formData.extraHeaders}
+            onChange={(e) => setFormData({ ...formData, extraHeaders: e.target.value })}
+            placeholder={"x-jg-auth: <token>\nX-Tenant: acme"}
+            spellCheck={false}
+            className="w-full py-2.5 px-3 text-sm text-text-main bg-surface-2 rounded-[10px] border border-transparent placeholder-text-muted/70 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/40 transition-all duration-150 ease-out font-mono"
+          />
+          <p className="text-xs text-text-muted">
+            Optional. One <code>Name: Value</code> per line, sent with every upstream request.
+            Reserved headers (Host, Content-Length, Connection, ...) are refused.
+          </p>
+          {extraHeaderErrors.length > 0 && (
+            <p className="text-xs text-red-500">{extraHeaderErrors.join(" · ")}</p>
+          )}
+        </div>
         <Input
           label="API Key (for Check)"
           type="password"

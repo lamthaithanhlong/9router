@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createProviderNode, getProviderNodes } from "@/models";
 import { OPENAI_COMPATIBLE_PREFIX, ANTHROPIC_COMPATIBLE_PREFIX, CUSTOM_EMBEDDING_PREFIX } from "@/shared/constants/providers";
 import { generateId } from "@/shared/utils";
+import { sanitizeExtraHeaders } from "@/shared/utils/extraHeaders";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, prefix, apiType, baseUrl, type } = body;
+    const { name, prefix, apiType, baseUrl, type, extraHeaders: rawExtraHeaders } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -41,6 +42,11 @@ export async function POST(request) {
     if (!prefix?.trim()) {
       return NextResponse.json({ error: "Prefix is required" }, { status: 400 });
     }
+
+    // Compatible nodes may need an upstream header the generic Bearer path
+    // cannot send. Invalid entries are dropped and reported back so the user is
+    // not left wondering why a header never reached the upstream.
+    const { headers: extraHeaders, errors: extraHeaderErrors } = sanitizeExtraHeaders(rawExtraHeaders);
 
     // Determine type
     const nodeType = type || "openai-compatible";
@@ -57,8 +63,12 @@ export async function POST(request) {
         apiType,
         baseUrl: (baseUrl || OPENAI_COMPATIBLE_DEFAULTS.baseUrl).trim(),
         name: name.trim(),
+        extraHeaders,
       });
-      return NextResponse.json({ node }, { status: 201 });
+      return NextResponse.json({
+        node,
+        ...(extraHeaderErrors.length ? { extraHeaderErrors } : {}),
+      }, { status: 201 });
     }
 
     if (nodeType === "custom-embedding") {
@@ -92,8 +102,12 @@ export async function POST(request) {
         prefix: prefix.trim(),
         baseUrl: sanitizedBaseUrl,
         name: name.trim(),
+        extraHeaders,
       });
-      return NextResponse.json({ node }, { status: 201 });
+      return NextResponse.json({
+        node,
+        ...(extraHeaderErrors.length ? { extraHeaderErrors } : {}),
+      }, { status: 201 });
     }
 
     return NextResponse.json({ error: "Invalid provider node type" }, { status: 400 });

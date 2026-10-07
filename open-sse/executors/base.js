@@ -4,6 +4,7 @@ import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { dbg } from "../utils/debugLog.js";
 import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE } from "../providers/shared.js";
 import { resolveOpenAICompatibleApiType } from "../services/provider.js";
+import { resolveExtraHeaders } from "../../src/shared/utils/extraHeaders.js";
 
 /**
  * BaseExecutor - Base class for provider executors
@@ -70,6 +71,14 @@ export class BaseExecutor {
 
     if (stream) {
       headers["Accept"] = "text/event-stream";
+    }
+
+    // User-declared headers for compatible nodes (gateway token, tenant id, …).
+    // Merged last so they win over the generic Bearer path: some gateways need a
+    // non-Bearer Authorization. Invalid entries are dropped, never thrown — a
+    // bad stored row must not break an otherwise valid request.
+    if (this.provider?.startsWith?.("openai-compatible-") || this.provider?.startsWith?.("anthropic-compatible-")) {
+      Object.assign(headers, resolveExtraHeaders(credentials?.providerSpecificData?.extraHeaders));
     }
 
     return headers;
