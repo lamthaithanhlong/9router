@@ -83,6 +83,7 @@ async function runAgent(deps, role, message, label, opts = {}) {
     let text = "";
     let tokensReal = null;
     let failure;
+    let cancelled = false; // the caller cancelled mid-call: the call did not succeed AND did not fail on its own
     let usd = 0;
     let calls = 0;
     let upstreamAttempts = 0; // upstream rows one logical call wrote: a retry combo writes several
@@ -113,8 +114,14 @@ async function runAgent(deps, role, message, label, opts = {}) {
       if (text.trim() === "") throw new Error("the route returned no content");
       deps.health?.ok(route.key);
     } catch (err) {
-      if (deps.aborted?.()) throw err; // the caller cancelled: do not try another route
       failure = err;
+      if (deps.aborted?.()) {
+        // The caller cancelled: do not try another route. `failure` must still be set, or the trace
+        // below records this call as status "ok" with 0 output tokens - which is how two cancelled
+        // runs (431 s and 258 s, nothing returned) showed a worker "ok" in the run log.
+        cancelled = true;
+        throw err;
+      }
     } finally {
       release();
       // True up the cost from 9Router's log: the real USD per call lives in usageHistory, not in
@@ -147,7 +154,7 @@ async function runAgent(deps, role, message, label, opts = {}) {
         model: route.model,
         fellBack: res.fellBack,
         backup: route.backup === true,
-        status: failure ? "error" : "ok",
+        status: cancelled ? "cancelled" : failure ? "error" : "ok",
         ...(failure ? { error: String(failure.message ?? failure).slice(0, 300) } : {}),
         ms: Date.now() - t0,
         ...(queuedMs > 500 ? { queuedMs } : {}),
@@ -157,7 +164,7 @@ async function runAgent(deps, role, message, label, opts = {}) {
         ...(upstreamAttempts > 1 ? { attempts: upstreamAttempts } : {}),
       });
       // The step feed is the owner's free live view: every call has a start line and a done line.
-      deps.steps?.step(`${label} ${failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${upstreamAttempts > 1 ? ` (${upstreamAttempts} upstream attempts)` : ""}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });
+      deps.steps?.step(`${label} ${cancelled ? "cancelled after " : failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${upstreamAttempts > 1 ? ` (${upstreamAttempts} upstream attempts)` : ""}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });
     }
     if (!failure) {
       if (route.backup && !deps.notes.some((n) => n.startsWith(`${role} ran on the BACKUP`))) {
@@ -404,8 +411,8 @@ export function formatTrace(trace = []) {
       lines.push(`- laya ${e.label}: ${e.status === "ok" ? `p=${e.detail}` : "unavailable"} (${(e.ms / 1000).toFixed(2)}s)`);
     } else {
       const fb = e.fellBack ? ", fallback" : "";
-      const err = e.status === "error" ? ", FAILED" : "";
-      const why = e.status === "error" && e.error ? ` (${e.error.replace(/\s+/g, " ").slice(0, 90)})` : "";
+      const err = e.status === "error" ? ", FAILED" : e.status === "cancelled" ? ", CANCELLED" : "";
+      const why = (e.status === "error" || e.status === "cancelled") && e.error ? ` (${e.error.replace(/\s+/g, " ").slice(0, 90)})` : "";
       lines.push(`- ${e.label} -> ${e.provider}/${e.model} [${e.key}${fb}${err}] ${(e.ms / 1000).toFixed(1)}s${e.queuedMs ? ` (queued ${(e.queuedMs / 1000).toFixed(1)}s)` : ""} ~${e.tokensIn} in / ~${e.tokensOut} out tok${why}`);
     }
   }

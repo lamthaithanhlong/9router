@@ -132,3 +132,17 @@ test("who.mjs: finds the 9Router rows inside a run's window and nothing outside 
   assert.deepEqual(rows.map((r) => `${r.provider}/${r.model}x${r.n}`), ["cursor/defaultx2", "codex/gpt-6.1-solx1"]);
   assert.ok(!rows.some((r) => r.model === "claude-4.6-opus-max"));
 });
+
+test("trace: a call cancelled mid-flight is recorded as cancelled, never as ok with nothing returned", async () => {
+  const d = deps({ reply: "" });
+  d.trace = [];
+  let started = 0;
+  d.spawn = async () => { started++; return ""; };
+  d.aborted = () => started > 0; // the cancel arrives while the first worker is running
+  await assert.rejects(runPipeline(d, { ...input, plan: "no" }), /run cancelled|no content/);
+  const w = d.trace.find((e) => e.role === "worker");
+  assert.ok(w, "the cancelled worker still leaves a trace entry");
+  assert.equal(w.status, "cancelled");
+  assert.match(w.error, /no content/);
+  assert.match(formatTrace(d.trace).join("\n"), /\[cursor, CANCELLED\]|CANCELLED/);
+});

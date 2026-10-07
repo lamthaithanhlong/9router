@@ -35,7 +35,7 @@ export function formatRun(run) {
     if (e.role === "laya") {
       out.push(`  laya ${e.label}: ${e.status === "ok" ? `p=${e.detail}` : "unavailable"}`);
     } else {
-      out.push(`  ${e.label} -> ${e.provider}/${e.model} [${e.key}${e.fellBack ? ", fallback" : ""}${e.status === "error" ? ", FAILED" : ""}] ${(e.ms / 1000).toFixed(1)}s${e.status === "error" && e.error ? ` (${e.error.replace(/\s+/g, " ").slice(0, 90)})` : ""}`);
+      out.push(`  ${e.label} -> ${e.provider}/${e.model} [${e.key}${e.fellBack ? ", fallback" : ""}${e.status === "error" ? ", FAILED" : e.status === "cancelled" ? ", CANCELLED" : ""}] ${(e.ms / 1000).toFixed(1)}s${(e.status === "error" || e.status === "cancelled") && e.error ? ` (${e.error.replace(/\s+/g, " ").slice(0, 90)})` : ""}`);
     }
   }
   const idle = ["planner", "researcher", "worker", "reviewer", "final_reviewer"].filter((r) => !ran.has(r));
