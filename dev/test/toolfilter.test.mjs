@@ -71,7 +71,7 @@ test("a refused filter name no longer kills the child: it is dropped and the chi
 test("every name the Harness refuses is dropped, including several at once", async () => {
   const ctx = fakeCtx({ refuse: ["subagent", "subagent_fork", "workflow"] });
   await run(toolFor(ctx));
-  assert.deepEqual(ctx.starts.at(-1), ["david_run"]);
+  assert.deepEqual(ctx.starts.at(-1), ["david_run", "david_ask"]);
 });
 
 test("the refusal is learned once per tool: later children start straight away", async () => {
@@ -121,7 +121,7 @@ test("no note when the Harness accepts the whole filter", async () => {
 });
 
 test("denyFor is still exported and unchanged for callers", () => {
-  assert.deepEqual(denyFor(DEFAULTS, "worker"), ["david_run", "subagent", "subagent_fork", "workflow"]);
+  assert.deepEqual(denyFor(DEFAULTS, "worker"), ["david_run", "david_ask", "subagent", "subagent_fork", "workflow"]);
   assert.ok(denyFor(DEFAULTS, "reviewer").includes("write"));
 });
 

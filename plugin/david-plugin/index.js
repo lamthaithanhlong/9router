@@ -7,6 +7,7 @@
 // No `Config` schema and no @deepseek-ai/* imports: the module has no runtime
 // dependencies, so it loads from a plain relative path in cordis.patch.yml.
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { createApiSpawn } from "./lib/api.js";
 import { createCostTracker } from "./lib/cost.js";
 import { createProbe } from "./lib/probe.js";
@@ -19,7 +20,7 @@ import { createSteps } from "./lib/steps.js";
 import { ToolFilter, denyFor } from "./lib/toolfilter.js";
 import { getChanges, runTests } from "./lib/changes.js";
 import { NAME, expandHome, resolveConfig } from "./lib/config.js";
-import { formatReport, runPipeline } from "./lib/pipeline.js";
+import { formatAnswer, formatReport, runAsk, runPipeline } from "./lib/pipeline.js";
 import { createDashboard } from "./lib/dashboard.js";
 import { recordRun } from "./lib/runlog.js";
 import { createQueue, idSource } from "./lib/queue.js";
@@ -42,6 +43,7 @@ export const inject = ["tools", "subagents"];
 const PROMPT_FILE = {
   planner: "planner",
   researcher: "researcher",
+  ask: "ask",
   worker: "worker",
   reviewer: "reviewer",
   final_reviewer: "reviewer",
@@ -120,7 +122,7 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
     description:
       "Run a coding task in a git repository through the cost-aware pipeline: Cursor workers make the change and run the tests, " +
       "Codex plans and researches when that is worth its quota, and a paid DeepSeek/Codex review runs only when the diff is large, " +
-      "touches risky paths, strays outside allowed_paths, or the tests were red twice. Use it for real code changes, not for questions. " +
+      "touches risky paths, strays outside allowed_paths, or the tests were red twice. Use it for real code changes; to find something out, use david_ask. " +
       "Models are chosen by role, not by you. Returns a report; status awaiting_human means a person must decide.",
     parameters: {
       type: "object",
@@ -147,7 +149,9 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
       const research = strings(args.research);
       if (tasks.length > cfg.limits.maxTasks) throw new Error(`david_run refused: ${tasks.length} sub-tasks is more than the limit of ${cfg.limits.maxTasks}; split the work into separate calls`);
       if (research.length > cfg.limits.maxResearch) throw new Error(`david_run refused: ${research.length} research questions is more than the limit of ${cfg.limits.maxResearch}`);
-      const input = {
+      // `_mode` is set only by david_ask below; it is not in this tool's schema, so a model cannot ask for it here.
+      const ask = args._mode === "ask";
+      const input = ask ? { task: args.task, cwd: args.cwd, mode: "ask", words: args.words } : {
         task: args.task,
         cwd: args.cwd,
         tasks: tasks.length ? tasks : [args.task],
@@ -210,14 +214,14 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
       let status = "error";
       let error;
       try {
-        const outcome = await runPipeline(deps, input);
+        const outcome = ask ? await runAsk(deps, input) : await runPipeline(deps, input);
         status = outcome.status;
         // Pull today's spend from 9Router before formatting; the report always shows a Cost line when cost is on.
         const day = cost ? await cost.dayUsd() : null;
         const costInfo = cost
           ? { thisTask: cost.taskUsd(), day, taskCap: cfg.cost.taskUsd, callCap: cfg.cost.callUsd }
           : null;
-        const text = formatReport(outcome, last, version, costInfo, uiUrl?.() ?? null);
+        const text = ask ? formatAnswer(outcome, version, costInfo, uiUrl?.() ?? null) : formatReport(outcome, last, version, costInfo, uiUrl?.() ?? null);
         const calls = trace.filter((t) => t.role !== "laya").length;
         steps.step(`run done: $${(cost?.taskUsd() ?? 0).toFixed(4)}, ${calls} calls`, { run: stamp, status, calls, usd: cost?.taskUsd() ?? 0 });
         return text;
@@ -239,6 +243,39 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
           trace,
         });
       }
+    },
+  };
+}
+
+// `david_ask` — the read-only way in: a question about files, answered by a read-only agent that is not the head
+// agent. It exists because the head agent's own context is what costs the most (each search step re-sends all of it):
+// a lookup that takes thirty commands is cheaper as one call that returns the answer. It runs through david_run's own
+// execute (same ledger, feed, run log and dashboard) in `ask` mode, so nothing is duplicated.
+export function buildAskTool(runTool, cfg) {
+  return {
+    name: cfg.askToolName,
+    description:
+      "Find something out without doing the search yourself: a read-only agent searches and reads files and replies with the " +
+      "answer and its evidence (paths and lines). No git repository needed, nothing is edited, no commands are run. " +
+      "Use it for questions that would take you several reads or searches (where is X, what did Y say, what does this code do). " +
+      "Use david_run to change code; do a one-line lookup yourself.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The question, with enough context for an agent that has not seen this conversation." },
+        cwd: { type: "string", description: "Absolute path of the directory to look in (default: the home directory)." },
+        max_words: { type: "number", description: "Word limit for the reply, 50 to 1500 (default 400)." },
+      },
+      required: ["question"],
+    },
+    output: {
+      schema: { type: "string" },
+      render: (_args, value) => [{ type: "text", text: value }],
+    },
+    timeoutMs: cfg.toolTimeoutMs,
+    async execute(args, exec) {
+      if (typeof args.question !== "string" || !args.question.trim()) throw new Error(`${cfg.askToolName} needs a question`);
+      return runTool.execute({ task: args.question, cwd: typeof args.cwd === "string" && args.cwd ? args.cwd : homedir(), words: args.max_words, _mode: "ask" }, exec);
     },
   };
 }
@@ -390,10 +427,12 @@ export function apply(ctx, userConfig) {
 
   const mount = () => {
     if (disposers.length) return;
-    disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe, rotation, () => dash?.url() ?? null)));
+    const runTool = buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe, rotation, () => dash?.url() ?? null);
+    disposers.push(ctx.tools.register(runTool));
+    disposers.push(ctx.tools.register(buildAskTool(runTool, cfg)));
     if (watchCost) disposers.push(ctx.tools.register(buildWatchTool(ctx, cfg, ledger, log, watchCost)));
     if (probe) disposers.push(ctx.tools.register(buildProbeTool(ctx, cfg, log, probe)));
-    log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ david_watch)" : ""}${probe ? " (+ david_probe)" : ""}`);
+    log(`tool "${cfg.toolName}" registered (v${version}) (+ ${cfg.askToolName})${watchCost ? " (+ david_watch)" : ""}${probe ? " (+ david_probe)" : ""}`);
   };
 
   // The tool needs the subagent provider; mount it whenever that appears.

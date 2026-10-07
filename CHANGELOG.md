@@ -13,6 +13,24 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-07
+
+### Added
+- **`david_ask`: a read-only way to hand a question to the plugin** (`lib/pipeline.js` `runAsk`, `prompts/ask.md`,
+  `index.js` `buildAskTool`). The head agent had no way to delegate an investigation: `david_run` grades a git diff and
+  throws when the folder is not a repository, so "where did Anjum say that this morning?" was done by the head agent
+  itself, 28 shell commands in its own context (every step re-sends all of it, which is where the tokens go). Now one call
+  hands the question to a read-only investigator and returns the answer first, then the evidence (paths and lines).
+  It runs on the researcher chain (the manager seat, then backup) with the "ask" prompt, no write/edit/bash tools, no git,
+  no diff, no tests, and goes through `david_run`'s own `execute`, so the same ledger, step feed, run log and dashboard
+  apply (it shows as the `ask` stage in the MANAGER column). Parameters: `question` (required), `cwd` (default: the home
+  directory), `max_words` (50 to 1500, default 400). When every route fails it returns `awaiting_human` with each route's
+  reason instead of an empty answer. Children never get it (`childTools.denyAll`).
+- `dev/verify-against-harness.mjs` checks both tools' schemas against the Harness's `defineTool()`.
+
+### Changed
+- `david_run`'s description now says to use `david_ask` to find something out.
+
 ## [0.9.0] - 2026-10-07
 
 ### Changed (breaking)

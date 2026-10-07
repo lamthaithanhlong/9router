@@ -15,7 +15,7 @@ import { resolveRole } from "./roles.js";
 
 async function runAgent(deps, role, message, label, opts = {}) {
   const { cfg } = deps;
-  const prompt = `${deps.loadPrompt(role)}\n\n---\n\n${message}`;
+  const prompt = `${deps.loadPrompt(opts.promptRole ?? role)}\n\n---\n\n${message}`;
   const inTokens = estimateTokens(prompt);
   const need = inTokens + cfg.limits.assumedOutputTokens;
   // `opts.skipRoutes` forces a role off the route it would otherwise pick — how the cross-check
@@ -177,6 +177,38 @@ async function runAgent(deps, role, message, label, opts = {}) {
     attempts.push(`${route.key}: ${String(failure.message ?? failure).slice(0, 100)}`);
     deps.log(`${role} on ${route.key} failed (${attempts.at(-1)}); trying the next route`);
   }
+}
+
+// An investigation: one read-only seat answers a question and the ANSWER is the product. There is no git
+// repository to diff, no tests, no review - david_run cannot do this (it grades a diff, and throws when the folder
+// is not a repository), so a head agent that wanted to delegate a search had nowhere to send it. It runs on the
+// researcher chain (the manager seat, then backup), which has no write/edit/bash tools, with the "ask" prompt.
+export const ASK_WORDS = { min: 50, max: 1500, dflt: 400 };
+
+export async function runAsk(deps, input) {
+  const notes = [];
+  deps.notes = notes;
+  const words = Math.min(ASK_WORDS.max, Math.max(ASK_WORDS.min, Math.round(Number(input.words)) || ASK_WORDS.dflt));
+  const message =
+    `# QUESTION\n${input.task}\n\n` +
+    `Look in ${input.cwd}. Your shell does NOT start there: use absolute paths.\n` +
+    `Word limit for your reply: ${words}.`;
+  const r = await runAgent(deps, "researcher", message, "ask", { promptRole: "ask" });
+  if (r.status === "held") return notes.push(r.reason), { status: "awaiting_human", answer: "", notes, trace: deps.trace };
+  return { status: "ok", answer: r.text.trim(), notes, trace: deps.trace };
+}
+
+export function formatAnswer(outcome, version, cost, uiUrl = null) {
+  const lines = [`david_ask: ${outcome.status}`];
+  if (uiUrl) lines.push("", `Live: ${uiUrl}`);
+  lines.push("", outcome.answer || "(no answer)");
+  // the "not called" line of david_run's trace is noise here: there is only ever one stage
+  const who = formatTrace(outcome.trace).filter((l) => !l.startsWith("- not called"));
+  if (who.length) lines.push("", "Who ran:", ...who);
+  if (outcome.notes.length) lines.push("", "Notes:", ...outcome.notes.map((n) => `- ${n}`));
+  if (cost) lines.push("", `Cost: $${cost.thisTask.toFixed(4)} this task`);
+  if (version) lines.push("", `Plugin: david plugin ${version}`);
+  return lines.join("\n");
 }
 
 // The plan goes first so every call shares one prefix and the cache hits.

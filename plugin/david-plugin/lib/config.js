@@ -10,6 +10,7 @@ export const NAME = "david-plugin";
 export const DEFAULTS = {
   subagentProvider: "spawn",
   toolName: "david_run",
+  askToolName: "david_ask",   // read-only investigation: the answer is the product (no git, no diff, no tests)
   toolTimeoutMs: 3_600_000,
 
   routes: {
@@ -104,7 +105,7 @@ export const DEFAULTS = {
   // more agents on models nobody budgeted. Roles other than worker also lose the
   // file-writing tools: a reviewer or researcher that edits files defeats its role.
   childTools: {
-    denyAll: ["david_run", "subagent", "subagent_fork", "workflow"],
+    denyAll: ["david_run", "david_ask", "subagent", "subagent_fork", "workflow"],
     denyNonWorker: ["write", "edit"],
   },
 

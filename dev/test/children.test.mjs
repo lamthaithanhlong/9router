@@ -14,14 +14,14 @@ const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 
 test("children never get the tools that start more agents; non-workers also lose write/edit", () => {
   const w = denyFor(DEFAULTS, "worker");
-  for (const t of ["david_run", "subagent", "subagent_fork", "workflow"]) assert.ok(w.includes(t), `worker must not get ${t}`);
+  for (const t of ["david_run", "david_ask", "subagent", "subagent_fork", "workflow"]) assert.ok(w.includes(t), `worker must not get ${t}`);
   assert.ok(!w.includes("write") && !w.includes("edit"));
   for (const role of ["planner", "researcher", "reviewer", "final_reviewer"]) {
     const d = denyFor(DEFAULTS, role);
     assert.ok(d.includes("write") && d.includes("edit") && d.includes("david_run"), role);
   }
   assert.deepEqual(denyFor(resolveConfig({ childTools: { denyAll: ["x"] } }), "worker"), ["x"]);
-  assert.equal(DEFAULTS.childTools.denyAll.length, 4); // defaults not mutated by denyFor
+  assert.equal(DEFAULTS.childTools.denyAll.length, 5); // defaults not mutated by denyFor
 });
 
 function fakeCtx() {
