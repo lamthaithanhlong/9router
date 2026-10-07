@@ -1,7 +1,9 @@
-import "./_sandbox.mjs";
+import { SANDBOX_HOME } from "./_sandbox.mjs";
 // SPEC 0.7.0 part D: the probe. A route that answers HTTP 200 with no text must be reported as
 // dead — that is exactly how the Cursor route fails, and 9Router records it as a success.
 import assert from "node:assert/strict";
+import { mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { createProbe } from "../../plugin/jev-orchestrator/lib/probe.js";
 import { resolveConfig } from "../../plugin/jev-orchestrator/lib/config.js";
@@ -78,6 +80,55 @@ test("probe: a second ask within ttlMs does not call upstream again, forget() fo
   probe.forget("cursor");
   await probe.probe("cursor");
   assert.equal(calls, 2);
+});
+
+test("probe: authenticates with the provider bearer key, not the dashboard CLI token", async () => {
+  // Caught by the live smoke test: /v1/chat/completions answers HTTP 401 to x-9r-cli-token (that
+  // header belongs to the dashboard), so the probe must send a real API key.
+  const prev = process.env.ROUTER9_API_KEY;
+  process.env.ROUTER9_API_KEY = "sk-test-key";
+  try {
+    const calls = [];
+    const { probe } = probeWith(async (url, init) => (calls.push({ url, init }), pong()));
+    const r = await probe.probe("cursor");
+    assert.equal(r.ok, true);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/v1\/chat\/completions$/);
+    assert.equal(calls[0].init.headers.Authorization, "Bearer sk-test-key");
+    assert.ok(!("x-9r-cli-token" in calls[0].init.headers), "the dashboard token is the wrong credential for /v1");
+    assert.equal(JSON.parse(calls[0].init.body).model, "cursor-workers");
+    // A reasoning route spends its budget on thinking first, so a tight max_tokens truncates the
+    // visible answer and makes a healthy route look dead (measured: 8 -> "P", 64 -> "PONG").
+    const asked = JSON.parse(calls[0].init.body).max_tokens;
+    assert.ok(asked >= 64, `the probe must not starve the answer (asked for ${asked} tokens)`);
+  } finally {
+    if (prev === undefined) delete process.env.ROUTER9_API_KEY;
+    else process.env.ROUTER9_API_KEY = prev;
+  }
+});
+
+test("probe: falls back to the active key in 9Router's own database when the env var is absent", async () => {
+  const prev = process.env.ROUTER9_API_KEY;
+  delete process.env.ROUTER9_API_KEY;
+  try {
+    const dir = join(SANDBOX_HOME, ".9router", "db");
+    mkdirSync(dir, { recursive: true });
+    const dbFile = join(dir, "data.sqlite");
+    rmSync(dbFile, { force: true });
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(dbFile);
+    db.exec("create table apiKeys (id integer primary key, key text, isActive int); insert into apiKeys (key, isActive) values ('sk-from-db', 1);");
+    db.close();
+
+    const calls = [];
+    const cfg = resolveConfig({ cost: { dbFile: "~/.9router/db/data.sqlite" } });
+    const probe = createProbe(cfg, { log: () => {}, fetchImpl: async (url, init) => (calls.push({ url, init }), pong()) });
+    const r = await probe.probe("cursor");
+    assert.equal(r.ok, true);
+    assert.equal(calls[0].init.headers.Authorization, "Bearer sk-from-db");
+  } finally {
+    if (prev !== undefined) process.env.ROUTER9_API_KEY = prev;
+  }
 });
 
 test("probe: only the routes flagged probe:true are asked", () => {

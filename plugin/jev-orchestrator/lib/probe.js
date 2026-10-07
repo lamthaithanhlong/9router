@@ -17,9 +17,34 @@ import { join } from "node:path";
 
 const ASK = "Reply with the single word: PONG";
 
-// The same token the Harness dashboard uses: sha256(machineId + salt + cliSecret)[0..16].
-// Absent (a machine with no 9Router, or an unreadable secret) simply means "no header",
-// and the probe then reports whatever the endpoint says.
+let DatabaseSync = null;
+let sqliteOk = false;
+try {
+  ({ DatabaseSync } = await import("node:sqlite"));
+  sqliteOk = true;
+} catch {
+  // No node:sqlite: the probe still works when ROUTER9_API_KEY is in the environment.
+}
+
+// `/v1/chat/completions` is 9Router's *proxy* endpoint: it wants the same bearer key a client
+// sends, NOT the dashboard's x-9r-cli-token (measured: the CLI token answers HTTP 401 here).
+// So resolve a real key: the Harness already holds one for this provider, and when it is not in
+// the environment we read the active one out of 9Router's own database.
+function activeApiKey(dbFile) {
+  if (!sqliteOk || !dbFile) return null;
+  let db = null;
+  try {
+    db = new DatabaseSync(dbFile, { readOnly: true });
+    return db.prepare("SELECT key FROM apiKeys WHERE isActive = 1 LIMIT 1").get()?.key ?? null;
+  } catch {
+    return null;
+  } finally {
+    try { db?.close(); } catch { /* read-only handle */ }
+  }
+}
+
+// Last resort for a dashboard-shaped endpoint; kept so a probe against a private 9Router with
+// no API key configured still reports something other than a bare 401.
 function cliToken(dataDir) {
   try {
     const raw = readFileSync(join(dataDir, "machine-id"), "utf8").trim();
@@ -30,14 +55,44 @@ function cliToken(dataDir) {
   }
 }
 
+const expandHome = (p) => (typeof p === "string" && p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
+
 export function createProbe(cfg, { log = () => {}, fetchImpl = fetch } = {}) {
   const c = cfg.probe ?? {};
   const baseUrl = String(c.baseUrl ?? "http://127.0.0.1:20128").replace(/\/+$/, "");
   const timeoutMs = Number(c.timeoutMs) > 0 ? Number(c.timeoutMs) : 15_000;
   const ttlMs = Number(c.ttlMs) > 0 ? Number(c.ttlMs) : 300_000;
-  const dataDir = c.dataDir ? c.dataDir.replace(/^~(?=\/|$)/, homedir()) : join(homedir(), ".9router");
+  // Never starve the answer. These are reasoning models and the thinking tokens are billed to the
+  // same budget, so a small max_tokens truncates the visible text: measured on cursor-workers,
+  // max_tokens 8 gave "" or "P", while 64 gave "PONG" every time with completion_tokens 33/30/11.
+  const maxTokens = Number(c.maxTokens) >= 32 ? Number(c.maxTokens) : 256;
+  const dataDir = expandHome(c.dataDir ?? "~/.9router");
+  const keyDb = expandHome(c.dbFile ?? cfg.cost?.dbFile ?? "~/.9router/db/data.sqlite");
   const cache = new Map();
   let warnedNoAuth = false;
+
+  function authHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const envKey = process.env.ROUTER9_API_KEY;
+    if (envKey) {
+      headers.Authorization = `Bearer ${envKey}`;
+      return headers;
+    }
+    const dbKey = activeApiKey(keyDb);
+    if (dbKey) {
+      headers.Authorization = `Bearer ${dbKey}`;
+      return headers;
+    }
+    const token = cliToken(dataDir);
+    if (token) {
+      headers["x-9r-cli-token"] = token;
+      if (!warnedNoAuth) { warnedNoAuth = true; log("probe found no API key; falling back to x-9r-cli-token, which /v1 refuses with 401"); }
+    } else if (!warnedNoAuth) {
+      warnedNoAuth = true;
+      log(`probe has neither ROUTER9_API_KEY nor an active key in ${keyDb}; probes will be refused`);
+    }
+    return headers;
+  }
 
   async function probe(routeKey) {
     const route = cfg.routes?.[routeKey];
@@ -48,19 +103,13 @@ export function createProbe(cfg, { log = () => {}, fetchImpl = fetch } = {}) {
 
     const at = Date.now();
     const out = { ok: false, ms: 0, chars: 0, sample: "", reason: "not probed", at };
-    const headers = { "Content-Type": "application/json" };
-    const envKey = process.env.ROUTER9_API_KEY;
-    const token = envKey ? null : cliToken(dataDir);
-    if (envKey) headers.Authorization = `Bearer ${envKey}`;
-    else if (token) headers["x-9r-cli-token"] = token;
-    else if (!warnedNoAuth) { warnedNoAuth = true; log("probe has neither ROUTER9_API_KEY nor a 9Router cli-secret; probes may be refused"); }
 
     const t0 = Date.now();
     try {
       const res = await fetchImpl(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
-        headers,
-        body: JSON.stringify({ model: route.model, messages: [{ role: "user", content: ASK }], max_tokens: 8, stream: false }),
+        headers: authHeaders(),
+        body: JSON.stringify({ model: route.model, messages: [{ role: "user", content: ASK }], max_tokens: maxTokens, stream: false }),
         signal: AbortSignal.timeout(timeoutMs),
       });
       const body = await res.text();

@@ -8,6 +8,9 @@
 // during a run. The configured `cfg.cost.assume[routeKey]` always wins over the rolling
 // average: the owner's manual override beats the learned number.
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 let DatabaseSync = null;
 let sqliteOk = false;
 try {
@@ -17,9 +20,17 @@ try {
   // node:sqlite is unavailable. The tracker falls back to the zero / null answers.
 }
 
+// Same defence as lib/steps.js: a caller that hands us a raw "~/.9router/..." (the default
+// below is written that way) must not silently lose every cost number because a tilde was
+// never expanded. index.js does expand, but the module cannot rely on that.
+function expandHome(p) {
+  return typeof p === "string" && p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
+}
+
 export function createCostTracker(cfg, { log = () => {} } = {}) {
   const costCfg = cfg.cost || {};
-  const dbFile = typeof costCfg.dbFile === "string" ? costCfg.dbFile : "~/.9router/db/data.sqlite";
+  const configured = typeof costCfg.dbFile === "string" && costCfg.dbFile ? costCfg.dbFile : "~/.9router/db/data.sqlite";
+  const dbFile = expandHome(configured);
   let db = null;
   let warned = false;
   const note = (msg) => { if (!warned) { warned = true; log(msg); } };

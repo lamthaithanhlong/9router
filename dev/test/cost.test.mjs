@@ -1,4 +1,4 @@
-import "./_sandbox.mjs";
+import { SANDBOX_HOME } from "./_sandbox.mjs";
 // SPEC 0.7.0 part C: cost tracker behaviour. Builds a temp SQLite with `node:sqlite` and feeds
 // it a few usageHistory / usageDaily rows, so we can exercise the watermark filter, the rolling
 // average and the missing-DB fallback without touching 9Router on the host.
@@ -13,8 +13,7 @@ const tmp = () => mkdtempSync(join(tmpdir(), "jev-cost-"));
 
 // Build a small, real 9Router-like database: one usageHistory row per call and one usageDaily
 // row per UTC day. 9Router's table names are the public contract we read.
-async function buildDb(usageRows = [], daily = []) {
-  const file = join(tmp(), "data.sqlite");
+async function buildDb(usageRows = [], daily = [], file = join(tmp(), "data.sqlite")) {
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(file);
   db.exec(
@@ -48,6 +47,19 @@ test("snapshot: highest id in usageHistory, -1 when the file is missing", async 
   const file = await buildDb([{ id: 7, provider: "router9", model: "cursor-workers", cost: 0.001 }]);
   const t2 = createCostTracker({ cost: { dbFile: file } }, { log: () => {} });
   assert.equal(t2.snapshot(), 7);
+});
+
+test("a raw ~ path is expanded here too, so a caller that forgets expandHome loses nothing", async () => {
+  // The live smoke test caught this: index.js expands the path, but createCostTracker did not,
+  // so a direct call with the documented default ("~/.9router/db/data.sqlite") opened nothing
+  // and every method answered zero for the whole day — silently, with one log line.
+  const dir = join(SANDBOX_HOME, ".9router", "db");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "data.sqlite");
+  rmSync(file, { force: true });
+  await buildDb([{ id: 3, provider: "mvn", model: "deepseek-v4.1-flash", cost: 0.0005 }], [], file);
+  const t = createCostTracker({ cost: { dbFile: "~/.9router/db/data.sqlite" } }, { log: () => {} });
+  assert.equal(t.snapshot(), 3, "the tilde was expanded and the database opened");
 });
 
 test("reconcile: sums only rows after the watermark; unmatched rows count too (parallel children)", async () => {

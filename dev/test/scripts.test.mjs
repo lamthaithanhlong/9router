@@ -40,7 +40,14 @@ test("sandbox: tests never see the real HOME", () => {
 test("every test file imports the sandbox first (a new file that forgets would write into the real ~/.dsh)", () => {
   const dir = join(PKG, "dev", "test");
   for (const f of readdirSync(dir).filter((n) => n.endsWith(".test.mjs"))) {
-    assert.ok(readFileSync(join(dir, f), "utf8").startsWith('import "./_sandbox.mjs";'), `${f} must start with the sandbox import`);
+    // The import must come first; the binding form may differ — a file that also needs
+    // SANDBOX_HOME writes `import { SANDBOX_HOME } from "./_sandbox.mjs";`, which is the same
+    // side effect and must not be rejected for its shape.
+    const first = readFileSync(join(dir, f), "utf8").split("\n", 1)[0].trim();
+    assert.ok(
+      /^import\s.*["']\.\/_sandbox\.mjs["'];?$/.test(first),
+      `${f} must start with the sandbox import (first line: ${first})`,
+    );
   }
 });
 

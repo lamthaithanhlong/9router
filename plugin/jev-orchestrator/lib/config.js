@@ -188,6 +188,12 @@ export const DEFAULTS = {
     timeoutMs: 15_000,  // a route that has not said PONG by now is not worth a child's time
     ttlMs: 300_000,     // how long one answer is trusted; a good answer is not re-asked per call
     dataDir: "~/.9router", // machine-id + auth/cli-secret live here, for the x-9r-cli-token header
+    // Generous on purpose. These routes are reasoning models: the thinking tokens come out of the
+    // same budget, so a small max_tokens truncates the visible answer. Measured on cursor-workers:
+    // max_tokens 8 -> "" or "P"; max_tokens 64 -> "PONG" three times out of three (completion_tokens
+    // 33, 30, 11). A probe that starves the answer reports a healthy route as dead — which is worse
+    // than no probe at all.
+    maxTokens: 256,
   },
 
   // The owner asked for a second opinion rather than a single reviewer verdict. `crossCheck`

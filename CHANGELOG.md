@@ -13,6 +13,38 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-07
+
+### Fixed
+- **The probe starved the answer it was asking for** (`probe.maxTokens`, `lib/probe.js`). These are
+  reasoning models and the thinking tokens come out of the same `max_tokens` budget, so the original
+  `max_tokens: 8` truncated the visible text: measured against the live route, 8 tokens gave `""` or
+  `"P"`, while 64 gave `PONG` three times out of three (completion_tokens 33, 30, 11). The probe would
+  therefore have reported a **healthy** route as dead and skipped it — worse than having no probe. The
+  budget is now `probe.maxTokens` (default 256), and a test asserts it is never tightened back below 64.
+- **The probe authenticated with the wrong credential** (`lib/probe.js`). `/v1/chat/completions` is
+  9Router's *proxy* endpoint and answers **HTTP 401** to the dashboard's `x-9r-cli-token`; the probe
+  now sends `ROUTER9_API_KEY` when the environment has it and otherwise reads the active key out of
+  9Router's own `apiKeys` table. Caught by a live smoke test against the running 9Router, not by a
+  stub: every probe had been reporting `HTTP 401` instead of the route's real answer, which would have
+  marked a healthy route dead and skipped it.
+- **`lib/cost.js` did not expand `~`**, so a caller passing the documented default
+  (`~/.9router/db/data.sqlite`) opened nothing and every cost method answered zero for the whole day —
+  silently, with a single log line. It now expands the path itself, as `lib/steps.js` already did.
+- `dev/test/scripts.test.mjs` accepted only the literal sandbox import, so a test file that also needs
+  `SANDBOX_HOME` was rejected for its shape rather than for forgetting the import.
+
+### Measured
+With all three fixes in, the live smoke test on the owner's machine reports what had only been assumed:
+`probe cursor-workers -> PONG` in about 3s and `probe manager-temp -> empty reply (HTTP 200, 0 chars)`
+in 240ms, the probe cache returns a second ask without a new upstream call, `cost.dayUsd()` reads the
+real `usageDaily` row, and `steps.js` writes `ts,run,text,...` in the documented order.
+
+The Cursor question itself is answered, and the answer is "sometimes": the relay returned `PONG` on
+three consecutive manual calls, and `""`/`"P"` through the probe before the token budget was fixed. It
+is not a route to build a run on, which is exactly why it now goes last on the worker chain and is
+probed first.
+
 ## [0.7.0] - 2026-10-07
 
 ### Added
