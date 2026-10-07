@@ -16,14 +16,27 @@ CHANGELOG.md                            build.sh refuses to build without an ent
 
 ## Why, in one paragraph (context you need)
 
-The pipeline's only route that used to cost money was the reviewer
-(`deepseek-host/deepseek-v4.1-flash`). Measurement on the owner's machine showed
-that is not where the money is: the *worker* route (`router9/cursor-workers`,
-which 9Router resolves to `jg/claude-sonnet-5`) costs **$0.0335 per call** —
-75k prompt tokens per call, 200 calls per run, **$6.71 per run**. The reviewer
-costs $0.00011 per call. So the plugin must (a) show real money per call and per
-task, (b) refuse to keep spending past a cap, and (c) let a person watch what the
-children are doing without paying for a model call to ask.
+The owner wants three things from this plugin: see what every child call costs,
+stop spending past a per-call and a per-task cap, and watch the children work
+without paying for a model call just to ask.
+
+9Router records a cost for every upstream call. Two of them look big: the worker
+route (`router9/cursor-workers`, resolved by 9Router to `jg/claude-sonnet-5`)
+measures **$0.0335 per call** at ~75k prompt tokens and 200 calls per run —
+**$6.71 per run**; the reviewer (`deepseek-host/deepseek-v4.1-flash`) measures
+**$0.00011 per call**.
+
+Those worker numbers are **9Router's list price, not money leaving the account**.
+`jg/*` is the owner's local ShareAI relay (`http://127.0.0.1:20129/v1`, a shim in
+front of the Cursor app's helper) and is not billed per token; `cu/*`, `cx/*` and
+`oc/*` are subscription or free namespaces for the same reason. The routes that
+really bill are the `openai-compatible` nodes the owner added — `mvn/*`
+(DeepSeek-Host) and `jg/*` only if it ever stops being a relay.
+
+So the plugin must never present a list price as spend. It reports what 9Router
+recorded, labels where the number came from, and lets the cap be configured per
+route, so an expensive-but-free subscription route is not throttled while a real
+per-token route is.
 
 Two hard facts that shape the design:
 
@@ -97,6 +110,12 @@ cost: {
 },
 ```
 
+**The caps only apply to routes that really bill.** A route object already carries
+`cost`: `"money"` (a per-token API), `"quota"` (a subscription quota) or `"free"`.
+Only `cost === "money"` routes are refused when over a cap. Every route is still
+measured, reported and written to the step feed, because the owner wants to see
+the numbers — but a free or quota route must never be throttled by a list price.
+
 `resolveConfig` already deep-merges plain objects, so nothing else is needed
 there. Document each key with a short comment in the style of the file.
 
@@ -106,7 +125,7 @@ In `lib/pipeline.js`, every place that is about to start a child (the planner,
 each researcher, each worker, each reviewer, final reviewer, each fix round):
 
 1. `assume = cost.assumeUsd(route.key)`.
-2. If `cfg.cost.enabled && cfg.cost.enforce`:
+2. If `cfg.cost.enabled && cfg.cost.enforce && route.cost === "money"`:
    - `assume > cfg.cost.callUsd` -> do **not** start it on this route: treat the
      route as over-budget, try the next affordable route on the chain, and if none
      remains push a note and hold the role (existing `kind: "hold"` path).
@@ -205,8 +224,10 @@ Register a second, read-only tool next to `jev_run`:
   ```
 
   followed by bullets describing: real cost per call and per task read from
-  9Router's `usageHistory`/`usageDaily`; `cost.callUsd` / `cost.taskUsd` caps;
-  the free step feed; the `watch.mjs` fix; the `jev_watch` tool.
+  9Router's `usageHistory`/`usageDaily`; `cost.callUsd` / `cost.taskUsd` caps that
+  apply only to `cost: "money"` routes; the free step feed; the `watch.mjs` fix;
+  the `jev_watch` tool. Say in the entry that the recorded cost is 9Router's
+  number and that a free or subscription route is measured but never throttled.
 
 - New tests in `dev/test/` — read an existing test file first and follow its
   style exactly (`dev/test/_sandbox.mjs` shows how tests build a temp home). Add:
