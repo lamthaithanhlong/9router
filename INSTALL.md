@@ -61,17 +61,18 @@ Rồi khởi động lại Harness.
 
 `dev/e2e/run.sh` chạy plugin trong Harness thật với model giả, không dùng khoá, không đụng `~/.dsh`. Cả hai kịch bản phải báo `PASS`.
 
-## Skill `david-force`: bắt buộc dùng david (bật/tắt)
+## Skill `david-force`: bắt buộc dùng david (bật/tắt từng harness)
 
-Cùng gói zip có thêm skill `david-force`; `install.sh` cài luôn (thêm `--no-skill` nếu không muốn), và cài ở trạng thái **TẮT**.
+Cùng gói zip có thêm skill `david-force`; `install.sh` cài luôn (thêm `--no-skill` nếu không muốn), và cài ở trạng thái **TẮT hết**.
 
 ```bash
-python3 ~/.claude/skills/david-force/scripts/force.py on       # bật: /david-force on
-python3 ~/.claude/skills/david-force/scripts/force.py off      # tắt: /david-force off
-python3 ~/.claude/skills/david-force/scripts/force.py status   # đang bật hay tắt, cái gì đã cài
+python3 ~/.claude/skills/david-force/scripts/force.py on           # bật cho harness DeepSeek: /david-force on
+python3 ~/.claude/skills/david-force/scripts/force.py on codex     # bật thêm cho Codex (cũng: on claude, on all)
+python3 ~/.claude/skills/david-force/scripts/force.py off          # tắt hết (off codex: chỉ tắt Codex)
+python3 ~/.claude/skills/david-force/scripts/force.py status       # từng harness: bật/tắt, hook, khối quy tắc
 ```
 
-Khi **BẬT**: DeepSeek Harness (agent đầu) và Codex không tự sửa file trong repo git được nữa, các lệnh sửa file bị từ chối kèm cách làm qua david (`david_run`, `david_ask`). Công tắc đọc ở mỗi lần gọi tool, nên bật/tắt không cần mở lại app. Codex gọi plugin bằng CLI `~/.david-force/bin/david run|ask|status`. Đọc file, và mọi thứ ngoài repo git (`~/.dsh`, `~/.codex`, `~/.claude`, `~/.agents`, `/tmp`), không bị chặn. Chi tiết và giới hạn: `skill/david-force/SKILL.md`.
+Mỗi harness có công tắc riêng: `on` chỉ bắt **harness DeepSeek**; Codex và Claude Code **không bị ảnh hưởng** nếu cháu không bật riêng. Khi bật: agent không tự sửa file trong repo git được nữa, các lệnh sửa file bị từ chối kèm cách làm qua david (`david_run`, `david_ask`). Công tắc đọc ở mỗi lần gọi tool nên không cần mở lại app. Codex/Claude gọi plugin bằng CLI `~/.david-force/bin/david run|ask|status`. Đọc file và mọi thứ ngoài repo git (`~/.dsh`, `~/.codex`, `~/.claude`, `~/.agents`, `/tmp`) không bị chặn. Chi tiết và giới hạn: `skill/david-force/SKILL.md`.
 
 ## Version
 

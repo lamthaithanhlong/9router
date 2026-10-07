@@ -31,7 +31,7 @@ class Sandbox(unittest.TestCase):
             (self.home / d).mkdir(parents=True)
         self.env = mock.patch.dict(os.environ, {
             'HOME': str(self.home), 'DAVID_FORCE_HOME': str(t / 'state'),
-            'DAVID_FORCE_CODEX_HOME': str(self.home / '.codex'), 'DAVID_FORCE_DSH_HOME': str(self.home / '.dsh'),
+            'DAVID_FORCE_CODEX_HOME': str(self.home / '.codex'), 'DAVID_FORCE_CLAUDE_HOME': str(self.home / '.claude'), 'DAVID_FORCE_DSH_HOME': str(self.home / '.dsh'),
             'DAVID_FORCE_SKILLS_HOME': str(self.home / '.claude' / 'skills'),
             'DAVID_FORCE_AGENTS_SKILLS_HOME': str(self.home / '.agents' / 'skills'),
             'DAVID_FORCE_TMP_ALLOW': ''}, clear=False)  # the sandbox itself lives in a temp dir
@@ -117,18 +117,44 @@ class Decision(Sandbox):
 
 class State(Sandbox):
     def test_default_is_off_and_a_broken_file_is_off(self):
-        self.assertFalse(common.is_on())
+        self.assertFalse(common.is_on('deepseek'))
         common.force_home().mkdir(parents=True)
         common.state_path().write_text('{not json')
-        self.assertFalse(common.is_on())
+        self.assertFalse(common.is_on('deepseek'))
 
-    def test_on_off_and_the_escape_variable(self):
-        common.write_state(True)
-        self.assertTrue(common.is_on())
-        with mock.patch.dict(os.environ, {'DAVID_FORCE_OFF': '1'}):
+    def test_each_harness_has_its_own_switch(self):
+        common.write_state({'deepseek': True})
+        self.assertEqual(common.current_harnesses(), {'deepseek': True, 'codex': False, 'claude': False})
+        self.assertTrue(common.enabled('deepseek'))
+        self.assertFalse(common.enabled('codex'), 'DeepSeek on never reaches Codex')
+        self.assertFalse(common.enabled('claude'))
+        common.write_state({'codex': True})
+        self.assertEqual(common.current_harnesses(), {'deepseek': True, 'codex': True, 'claude': False}, 'merged, not replaced')
+        common.write_state({'deepseek': False})
+        self.assertEqual(common.current_harnesses(), {'deepseek': False, 'codex': True, 'claude': False})
+
+    def test_is_on_follows_the_harness_the_hook_names(self):
+        common.write_state({'claude': True})
+        with mock.patch.dict(os.environ, {'DAVID_FORCE_HARNESS': 'claude'}):
+            self.assertTrue(common.is_on())
+        with mock.patch.dict(os.environ, {'DAVID_FORCE_HARNESS': 'codex'}):
             self.assertFalse(common.is_on())
+        self.assertFalse(common.is_on(), 'a hook that names no harness is Codex\'s')
+
+    def test_a_state_file_from_before_the_switches_meant_the_deepseek_harness(self):
+        common.force_home().mkdir(parents=True)
+        common.state_path().write_text('{"on": true}')
+        self.assertEqual(common.current_harnesses(), {'deepseek': True, 'codex': False, 'claude': False})
+        self.assertFalse(common.enabled('codex'))
+
+    def test_bool_shorthand_and_the_escape_variable(self):
+        common.write_state(True)
+        self.assertTrue(common.enabled('deepseek'))
+        with mock.patch.dict(os.environ, {'DAVID_FORCE_OFF': '1'}):
+            self.assertFalse(common.enabled('deepseek'))
         common.write_state(False)
-        self.assertFalse(common.is_on())
+        self.assertFalse(common.enabled('deepseek'))
+        self.assertFalse(json.loads(common.state_path().read_text())['on'])
 
 
 class Guard(Sandbox):
@@ -138,13 +164,13 @@ class Guard(Sandbox):
 
     def test_off_prints_nothing_on_prints_a_deny(self):
         self.assertIsNone(force_guard.decide(self.payload()))
-        common.write_state(True)
+        common.write_state({'codex': True})
         reason = force_guard.decide(self.payload())
         self.assertIn('david', reason)
         self.assertIsNone(force_guard.decide(self.payload(tool_input={'command': 'ls'})))
 
     def test_script_output_is_the_codex_deny_json_and_it_fails_open(self):
-        common.write_state(True)
+        common.write_state({'codex': True})
         env = {**os.environ}
         run = lambda stdin: subprocess.run([sys.executable, str(ROOT / 'scripts' / 'force_guard.py')], input=stdin,
                                            capture_output=True, text=True, env=env)
@@ -167,7 +193,7 @@ class Hooks(Sandbox):
         self.assertFalse((common.force_home() / 'sessions').exists())
 
     def test_prompt_reminder_and_stop_blocks_once_per_turn(self):
-        common.write_state(True)
+        common.write_state({'codex': True})
         out = self.fire('UserPromptSubmit')
         self.assertIn('david', out['hookSpecificOutput']['additionalContext'])
         for _ in range(force_hook.STOP_MIN):
@@ -179,7 +205,7 @@ class Hooks(Sandbox):
         self.assertIsNone(self.fire('Stop', stop_hook_active=True))
 
     def test_a_turn_that_used_david_or_did_little_is_left_alone(self):
-        common.write_state(True)
+        common.write_state({'codex': True})
         self.fire('UserPromptSubmit')
         for _ in range(force_hook.STOP_MIN + 3):
             self.fire('PostToolUse', tool_name='Bash', tool_input={'command': '~/.david-force/bin/david ask "q"'})
@@ -189,7 +215,7 @@ class Hooks(Sandbox):
         self.assertIsNone(self.fire('Stop', sid='s2'))
 
     def test_a_new_prompt_resets_the_turn(self):
-        common.write_state(True)
+        common.write_state({'codex': True})
         self.fire('UserPromptSubmit')
         for _ in range(force_hook.STOP_MIN):
             self.fire('PostToolUse', tool_name='Bash', tool_input={'command': 'ls'})
@@ -204,16 +230,26 @@ class Control(Sandbox):
     def seed(self):
         (self.home / '.codex' / 'AGENTS.md').write_text('# mine\nkeep this\n')
         (self.home / '.dsh' / 'AGENTS.md').write_text('# ds\n')
+        (self.home / '.claude' / 'CLAUDE.md').write_text('# claude mine\n')
         gk = {'hooks': {'PreToolUse': [{'hooks': [{'type': 'command', 'command': 'gk hook'}], 'matcher': ''}]}}
         (self.home / '.codex' / 'hooks.json').write_text(json.dumps(gk))
+        (self.home / '.claude' / 'settings.json').write_text(json.dumps({'model': 'x', 'hooks': {'Stop': [
+            {'hooks': [{'type': 'command', 'command': 'mission'}]}]}}))
 
-    def test_install_does_not_turn_it_on_and_keeps_other_hooks(self):
+    def texts(self):
+        return tuple((self.home / d).read_text() for d in ('.codex/AGENTS.md', '.dsh/AGENTS.md', '.claude/CLAUDE.md'))
+
+    def test_install_does_not_turn_anything_on_and_keeps_other_hooks(self):
         self.seed()
+        claude_before = (self.home / '.claude' / 'settings.json').read_text()
         out = self.run_cli(lambda: print('\n'.join(force.install())))
-        self.assertFalse(common.is_on())
-        self.assertTrue(force.hooks_installed())
+        self.assertFalse(any(common.current_harnesses().values()))
+        self.assertTrue(force.hooks_installed('codex'))
+        self.assertFalse(force.hooks_installed('claude'))
+        self.assertEqual((self.home / '.claude' / 'settings.json').read_text(), claude_before, 'install leaves Claude alone')
         hooks = json.loads((self.home / '.codex' / 'hooks.json').read_text())['hooks']
         self.assertEqual(len(hooks['PreToolUse']), 2, 'ours is added, the other one stays')
+        self.assertIn('DAVID_FORCE_HARNESS=codex', hooks['PreToolUse'][1]['hooks'][0]['command'])
         self.assertTrue((common.force_home() / 'bin' / 'david').is_symlink())
         self.assertTrue((self.home / '.claude' / 'skills' / 'david-force' / 'SKILL.md').exists())
         self.assertTrue((self.home / '.codex' / 'skills' / 'david-force').is_symlink())
@@ -221,45 +257,90 @@ class Control(Sandbox):
         self.assertIn('hooks added', out)
         self.assertEqual(force.install(), [], 'a second install changes nothing')
 
-    def test_on_then_off_leaves_the_files_as_they_were(self):
+    def test_plain_on_is_the_deepseek_harness_only(self):
         self.seed()
-        codex, dsh = self.home / '.codex' / 'AGENTS.md', self.home / '.dsh' / 'AGENTS.md'
-        before = (codex.read_text(), dsh.read_text())
-        force.turn_on()
-        self.assertTrue(common.is_on())
-        self.assertIn('david-force:begin', codex.read_text())
-        self.assertIn('david_run', dsh.read_text())
-        self.assertTrue(codex.read_text().startswith('# mine\nkeep this\n'))
-        force.turn_on()
-        self.assertEqual(codex.read_text().count('david-force:begin'), 1, 'on twice does not stack blocks')
-        force.turn_off()
-        self.assertFalse(common.is_on())
-        self.assertEqual((codex.read_text(), dsh.read_text()), before)
-        self.assertTrue(force.hooks_installed(), 'off leaves the hooks in place; they do nothing')
+        before = self.texts()
+        codex_hooks = (self.home / '.codex' / 'hooks.json').read_text()
+        claude_settings = (self.home / '.claude' / 'settings.json').read_text()
+        out = '\n'.join(force.turn_on(force.parse_targets([], ['deepseek'])))
+        self.assertEqual(common.current_harnesses(), {'deepseek': True, 'codex': False, 'claude': False})
+        codex, dsh, claude = self.texts()
+        self.assertIn('david_run', dsh)
+        self.assertEqual((codex, claude), (before[0], before[2]), 'Codex and Claude files are untouched')
+        self.assertEqual((self.home / '.codex' / 'hooks.json').read_text(), codex_hooks)
+        self.assertEqual((self.home / '.claude' / 'settings.json').read_text(), claude_settings)
+        self.assertIn('not governed', out)
+        self.assertIn('codex', out.split('not governed')[1])
+
+    def test_on_codex_and_on_claude_are_opt_in_and_independent(self):
+        self.seed()
+        force.turn_on(['codex'])
+        self.assertEqual(common.current_harnesses(), {'deepseek': False, 'codex': True, 'claude': False})
+        self.assertIn('david-force:begin', self.texts()[0])
+        self.assertTrue(force.hooks_installed('codex'))
+        self.assertFalse(force.hooks_installed('claude'))
+        self.assertEqual(self.texts()[2], '# claude mine\n')
+        force.turn_on(['claude'])
+        self.assertTrue(force.hooks_installed('claude'))
+        settings = json.loads((self.home / '.claude' / 'settings.json').read_text())
+        self.assertEqual(settings['model'], 'x', 'the rest of settings.json is kept')
+        self.assertEqual(settings['hooks']['Stop'][0]['hooks'][0]['command'], 'mission', 'the owner\'s own hook stays')
+        pre = settings['hooks']['PreToolUse'][0]
+        self.assertEqual(pre['matcher'], 'Bash|Edit|Write|MultiEdit|NotebookEdit')
+        self.assertIn('DAVID_FORCE_HARNESS=claude', pre['hooks'][0]['command'])
+        self.assertIn('/.claude/skills/david-force/scripts/force_guard.py', pre['hooks'][0]['command'])
+        self.assertIn('david-force:begin', self.texts()[2])
+        force.turn_off(['codex'])
+        self.assertEqual(common.current_harnesses(), {'deepseek': False, 'codex': False, 'claude': True})
+        self.assertNotIn('david-force', self.texts()[0])
+        self.assertIn('david-force:begin', self.texts()[2], 'off codex does not touch Claude')
+
+    def test_all_and_bare_off(self):
+        self.seed()
+        before = self.texts()
+        force.turn_on(force.parse_targets(['all'], ['deepseek']))
+        self.assertEqual(common.current_harnesses(), {'deepseek': True, 'codex': True, 'claude': True})
+        force.turn_on(['deepseek'])
+        self.assertEqual(self.texts()[1].count('david-force:begin'), 1, 'on twice does not stack blocks')
+        force.turn_off(force.parse_targets([], list(force.HARNESSES)))
+        self.assertEqual(common.current_harnesses(), {'deepseek': False, 'codex': False, 'claude': False})
+        self.assertEqual(self.texts(), before, 'every file is back exactly as it was')
+        self.assertTrue(force.hooks_installed('codex'), 'off leaves the hooks in place; they do nothing')
+
+    def test_unknown_target_is_refused(self):
+        with self.assertRaises(SystemExit):
+            force.parse_targets(['gemini'], ['deepseek'])
+        self.assertEqual(force.parse_targets(['harness', 'deepseek', 'codex'], []), ['deepseek', 'codex'])
 
     def test_uninstall_removes_everything_it_added(self):
         self.seed()
         force.install()
-        force.turn_on()
+        force.turn_on(['deepseek', 'codex', 'claude'])
         force.uninstall()
-        self.assertFalse(force.hooks_installed())
+        self.assertFalse(force.hooks_installed('codex'))
+        self.assertFalse(force.hooks_installed('claude'))
         hooks = json.loads((self.home / '.codex' / 'hooks.json').read_text())['hooks']
         self.assertEqual(hooks['PreToolUse'][0]['hooks'][0]['command'], 'gk hook')
+        self.assertEqual(json.loads((self.home / '.claude' / 'settings.json').read_text())['hooks']['Stop'][0]['hooks'][0]['command'], 'mission')
         self.assertFalse(common.force_home().exists())
-        self.assertNotIn('david-force', (self.home / '.codex' / 'AGENTS.md').read_text())
+        self.assertNotIn('david-force', ''.join(self.texts()))
 
     def test_a_harness_that_is_not_installed_is_skipped_not_created(self):
-        for d in (self.home / '.codex', self.home / '.dsh'):
-            os.rmdir(d)
-        self.assertEqual(force.blocks(True), [])
-        self.assertFalse(force.set_hooks(True))
+        for d in ('.codex', '.dsh', '.claude/skills', '.claude'):
+            os.rmdir(self.home / d)
+        self.assertEqual(force.blocks(list(force.HARNESSES), True), [])
+        self.assertFalse(force.set_hooks('codex', True))
+        self.assertFalse(force.set_hooks('claude', True))
 
-    def test_status_reports_without_raising(self):
+    def test_status_reports_each_harness(self):
         self.seed()
+        self.assertIn('david-force: OFF', '\n'.join(force.status()))
+        force.turn_on(['deepseek'])
         text = '\n'.join(force.status())
-        self.assertIn('david-force: OFF', text)
-        force.turn_on()
-        self.assertIn('david-force: ON', '\n'.join(force.status()))
+        self.assertIn('david-force: ON', text)
+        self.assertRegex(text, r'deepseek\s+ON')
+        self.assertRegex(text, r'codex\s+off')
+        self.assertRegex(text, r'claude\s+off')
 
 
 class Cli(unittest.TestCase):

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PROMPT, analyze, applyForce, commandModifies, isHead, isOn, reasonToDeny } from "../../plugin/david-plugin/lib/force.js";
+import { PROMPT, analyze, applyForce, commandModifies, enabled, isHead, isOn, reasonToDeny } from "../../plugin/david-plugin/lib/force.js";
 
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL("../../skill/david-force/tests/commands.json", import.meta.url)), "utf8"));
 
@@ -210,5 +210,33 @@ test("force prompt: the service is taken from the context ctx.inject hands over 
     assert.equal(sections.length, 0);
     setOn(true); force.sync();
     assert.equal(sections.length, 1);
+  } finally { force.dispose(); setOn(false); }
+});
+
+test("force: each harness has its own switch; DeepSeek on never reaches Codex or Claude, and the old single switch meant DeepSeek", () => {
+  const write = (o) => { mkdirSync(process.env.DAVID_FORCE_HOME, { recursive: true }); writeFileSync(join(process.env.DAVID_FORCE_HOME, "state.json"), JSON.stringify(o)); };
+  write({ on: true, harnesses: { deepseek: true, codex: false, claude: false } });
+  assert.deepEqual(["deepseek", "codex", "claude"].map(enabled), [true, false, false]);
+  assert.equal(isOn(), true, "this plugin runs in DeepSeek Harness: its default is that switch");
+  write({ on: true, harnesses: { deepseek: false, codex: true, claude: true } });
+  assert.deepEqual(["deepseek", "codex", "claude"].map(enabled), [false, true, true]);
+  assert.equal(isOn(), false, "Codex and Claude on does not govern the DeepSeek harness");
+  write({ on: true });
+  assert.deepEqual(["deepseek", "codex", "claude"].map(enabled), [true, false, false], "a state file from before the switches");
+  process.env.DAVID_FORCE_OFF = "1";
+  assert.equal(enabled("deepseek"), false);
+  delete process.env.DAVID_FORCE_OFF;
+  setOn(false);
+});
+
+test("force guard: with only Codex switched on, the DeepSeek head is not refused", () => {
+  const f = fakeCtx();
+  const force = applyForce(f.ctx);
+  try {
+    mkdirSync(process.env.DAVID_FORCE_HOME, { recursive: true });
+    writeFileSync(join(process.env.DAVID_FORCE_HOME, "state.json"), JSON.stringify({ on: true, harnesses: { deepseek: false, codex: true, claude: false } }));
+    assert.equal(f.guards[0]({ name: "edit", arguments: { file_path: join(repo, "src", "a.js") }, agent: head() }), undefined);
+    writeFileSync(join(process.env.DAVID_FORCE_HOME, "state.json"), JSON.stringify({ on: true, harnesses: { deepseek: true, codex: false, claude: false } }));
+    assert.match(f.guards[0]({ name: "edit", arguments: { file_path: join(repo, "src", "a.js") }, agent: head() }), /david-force is ON/);
   } finally { force.dispose(); setOn(false); }
 });

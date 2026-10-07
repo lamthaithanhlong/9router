@@ -235,7 +235,7 @@ test("uninstall.sh removes the skill's hooks and links with the plugin, and --ke
   sh("uninstall.sh", ["--keep-skill"], { HOME: m.home, DSH_HOME: m.dsh });
   assert.equal(hookCommands(m.home).filter((c) => c.includes("david-force/scripts/")).length, 4, "--keep-skill keeps the skill");
   const out = sh("uninstall.sh", [], { HOME: m.home, DSH_HOME: m.dsh });
-  assert.match(out, /skill: Codex hooks removed/);
+  assert.match(out, /skill: codex hooks removed/);
   assert.equal(hookCommands(m.home).filter((c) => c.includes("david-force/scripts/")).length, 0);
   assert.ok(!existsSync(join(m.home, ".david-force")));
   assert.ok(!existsSync(join(m.home, ".agents", "skills", "david-force")));

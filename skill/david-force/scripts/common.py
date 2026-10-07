@@ -32,16 +32,47 @@ def read_state() -> dict:
         return {}
 
 
-def is_on() -> bool:
-    """Fail open: a missing or broken state file means the rule is off, never a stuck harness."""
+HARNESSES = ('deepseek', 'codex', 'claude')
+
+
+def enabled(harness: str) -> bool:
+    """Is the rule ON for this harness? Each harness has its own switch: turning it on for DeepSeek never reaches Codex
+    or Claude Code. Fail open: a missing or broken state file means OFF, never a stuck harness.
+
+    A state file from before the switches were per harness ({"on": true}) meant "the DeepSeek harness".
+    """
     if os.environ.get('DAVID_FORCE_OFF'):
         return False
-    return read_state().get('on') is True
+    st = read_state()
+    per = st.get('harnesses')
+    if isinstance(per, dict):
+        return per.get(harness) is True
+    return harness == 'deepseek' and st.get('on') is True
 
 
-def write_state(on: bool, by: str = 'cli') -> dict:
+def is_on(harness: 'str | None' = None) -> bool:
+    """The hooks say which harness runs them (DAVID_FORCE_HARNESS=codex|claude in their command line); a hook installed
+    before that existed is Codex's, and Codex is only governed when the owner switched Codex on."""
+    return enabled(harness or os.environ.get('DAVID_FORCE_HARNESS') or 'codex')
+
+
+def current_harnesses() -> dict:
+    st = read_state()
+    per = st.get('harnesses')
+    if isinstance(per, dict):
+        return {h: per.get(h) is True for h in HARNESSES}
+    return {h: (h == 'deepseek' and st.get('on') is True) for h in HARNESSES}
+
+
+def write_state(updates, by: str = 'cli') -> dict:
+    """Merge {harness: bool} into the state (True/False alone means the DeepSeek harness: the old single switch)."""
     from datetime import datetime, timezone
-    state = {'on': bool(on), 'since': datetime.now(timezone.utc).isoformat(timespec='seconds'), 'by': by}
+    if isinstance(updates, bool):
+        updates = {'deepseek': updates}
+    per = current_harnesses()
+    per.update({h: bool(v) for h, v in updates.items() if h in HARNESSES})
+    state = {'on': any(per.values()), 'harnesses': per,
+             'since': datetime.now(timezone.utc).isoformat(timespec='seconds'), 'by': by}
     home = force_home()
     home.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(home), prefix='.state-')

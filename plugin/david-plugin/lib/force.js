@@ -28,8 +28,22 @@ export function readState() {
   }
 }
 
-/** Fail open: a missing or broken state file is OFF. */
-export const isOn = () => !process.env.DAVID_FORCE_OFF && readState().on === true;
+export const HARNESSES = ["deepseek", "codex", "claude"];
+
+/**
+ * Is the rule ON for this harness? Each harness has its own switch ({"harnesses": {"deepseek": true, ...}}), so turning it on
+ * for DeepSeek never reaches Codex or Claude Code. A state file from before that ({"on": true}) meant the DeepSeek harness.
+ * Fail open: a missing or broken state file is OFF.
+ */
+export function enabled(harness) {
+  if (process.env.DAVID_FORCE_OFF) return false;
+  const st = readState();
+  if (st.harnesses && typeof st.harnesses === "object") return st.harnesses[harness] === true;
+  return harness === "deepseek" && st.on === true;
+}
+
+/** This plugin runs inside DeepSeek Harness, so its default is that harness's switch. */
+export const isOn = (harness = "deepseek") => enabled(harness);
 
 // ---- where direct edits are fine --------------------------------------------------------------------------------------
 

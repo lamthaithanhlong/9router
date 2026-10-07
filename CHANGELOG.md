@@ -13,6 +13,23 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
+### Changed
+- **`david-force` has one switch per harness.** `/david-force on` now governs the DeepSeek harness only; Codex and Claude Code are
+  governed only after `on codex` / `on claude` (or `on all`), and `off` with no target turns all of them off (`off codex` turns one
+  off). 0.11.0 switched Codex on together with DeepSeek, which was not what was asked for. `state.json` carries
+  `{"on", "harnesses": {"deepseek", "codex", "claude"}}`; a state file from 0.11.0 (`{"on": true}`) is read as "DeepSeek".
+  `status` shows each harness.
+- Each hook names its harness (`DAVID_FORCE_HARNESS=codex|claude` in its command line), so a Codex switch never governs Claude
+  Code and the other way round; a hook installed before that is Codex's. `install` rewrites the Codex hooks to carry it.
+
+### Added
+- **`on claude`: Claude Code can be governed too, opt-in.** It adds the same four hooks to `~/.claude/settings.json` (`PreToolUse`
+  only for `Bash|Edit|Write|MultiEdit|NotebookEdit`) and a rule block to `~/.claude/CLAUDE.md`, each file saved first; the owner's own
+  hooks and settings are kept. `install` adds nothing to Claude's settings, and `uninstall` removes what `on claude` added.
+- `lib/force.js` exports `enabled(harness)`; the plugin's guard, system-prompt rule and steering follow the `deepseek` switch.
+
 ## [0.11.0] - 2026-10-07
 
 ### Added
