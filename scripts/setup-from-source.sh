@@ -16,6 +16,7 @@
 # TUỲ CHỌN
 #   -n, --no-start     Chỉ build, không cài/khởi động agent
 #   -s, --skip-build   Bỏ bước build (dùng cli/app đang có)
+#       --keep-cache   Giữ .next-cli-build (~620M) cho lần build sau nhanh hơn
 #       --pull         git pull --ff-only trước khi build
 #   -h, --help         In trợ giúp
 
@@ -26,12 +27,33 @@ PORT="${NINEROUTER_PORT:-20128}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_JS="$REPO/cli/cli.js"
 APP_DIR="$REPO/cli/app"
+KEEP_CACHE=0
 DO_PULL=0
 DO_BUILD=1
 DO_START=1
 
 usage() {
-  sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^#\{1,\} \{0,1\}//'
+  cat <<'USAGE'
+setup-from-source.sh — dựng và chạy 9Router từ chính source này.
+
+VÌ SAO CÓ SCRIPT NÀY
+  Bản cài bằng `npm i -g 9router` bị npm ghi đè mỗi lần cập nhật, nên mọi bản
+  vá trong node_modules/app đều mất sạch. Chạy từ clone này thì code nằm ở
+  src/ — npm global không chạm tới, và launchd tự dựng lại sau khi reboot.
+
+DÙNG (máy mới)
+  git clone https://github.com/lamthaithanhlong/9router.git ~/src/9router
+  ~/src/9router/scripts/setup-from-source.sh
+
+Chạy lại script sau mỗi lần `git pull` để build lại và restart. Idempotent.
+
+TUỲ CHỌN
+  -n, --no-start     Chỉ build, không cài/khởi động agent
+  -s, --skip-build   Bỏ bước build (dùng cli/app đang có)
+      --keep-cache   Giữ .next-cli-build (~620M) cho lần build sau nhanh hơn
+      --pull         git pull --ff-only trước khi build
+  -h, --help         In trợ giúp
+USAGE
   exit 0
 }
 
@@ -39,6 +61,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -n|--no-start)   DO_START=0; shift ;;
     -s|--skip-build) DO_BUILD=0; shift ;;
+    --keep-cache)    KEEP_CACHE=1; shift ;;
     --pull)          DO_PULL=1; shift ;;
     -h|--help)       usage ;;
     *) printf 'Tham số lạ: %s (xem --help)\n' "$1" >&2; exit 2 ;;
@@ -81,6 +104,15 @@ fi
 { [ -f "$APP_DIR/server.js" ] || [ -f "$APP_DIR/custom-server.js" ]; } \
   || die "Build không tạo ra $APP_DIR/server.js — xem log phía trên."
 ok "cli/app sẵn sàng ($(du -sh "$APP_DIR" | cut -f1))"
+
+# Next giữ nguyên cây build ở .next-cli-build (~620M). cli/app đã là bản
+# standalone đầy đủ nên cây đó chỉ có ích cho lần build kế tiếp — mà build thì
+# hiếm. Trả lại dung lượng.
+if [ "$DO_BUILD" = 1 ] && [ "$KEEP_CACHE" = 0 ] && [ -d "$REPO/.next-cli-build" ]; then
+  CACHE_SIZE="$(du -sh "$REPO/.next-cli-build" | cut -f1)"
+  rm -rf "$REPO/.next-cli-build"
+  ok "dọn .next-cli-build ($CACHE_SIZE) — thêm --keep-cache nếu muốn giữ"
+fi
 
 if [ "$DO_START" = 0 ]; then
   step "Bỏ qua autostart (--no-start). Chạy tay bằng:"
