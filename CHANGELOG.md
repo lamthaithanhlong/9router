@@ -13,6 +13,27 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-10-07
+
+### Added
+- **FLOW panel on the live dashboard** (`lib/ui/index.html`): the whole pipeline as an animated graph —
+  head, the Jev gate, planner, researchers and workers in parallel, reviewer, final review, result — with
+  a node per real stage, animated edges and a travelling dot while a stage runs, the rotating manager seat
+  linked to every stage it took (`via manager`, with its turn), and a ring plus a short bubble for every
+  step the feed receives. UI only; the page is read on every request.
+
+### Fixed
+- **A call cancelled mid-flight was recorded as `ok` with 0 output tokens** (`lib/pipeline.js`). The
+  cancel path rethrew before `failure` was set, so two cancelled runs (431 s and 258 s, nothing returned)
+  showed a worker "ok" in the run log. The trace now says `cancelled` with the reason, the step feed says
+  "cancelled after", and `who.mjs` and the report mark it CANCELLED. Still no other route is tried after a cancel.
+- **File dumps raised a false sandbox-refusal warning** (`lib/progress.js`). The refusal regex ran over the
+  whole tool result, so reading any file that mentions the phrase (this module included) was flagged. Only
+  the first 120 characters are tested and `<path>` dumps are skipped.
+- **`watch.mjs` replayed the oldest 50 9Router rows as if live** (`watch.mjs`). It started at row id 0, so
+  days-old calls appeared with time-only stamps. `--once` now shows the last 20, follow mode only what
+  arrives after it starts, and rows older than today carry their date.
+
 ## [0.7.5] - 2026-10-07
 
 ### Added
