@@ -1,4 +1,5 @@
 import { execFileSync, execSync } from "child_process";
+import fs from "fs";
 import path from "path";
 
 // Extras that improve headroom compression quality. `proxy` is the base;
@@ -72,10 +73,31 @@ export function findHeadroomBinary() {
 // Interpreters to probe, most specific first: the python next to the headroom
 // binary (guaranteed to have headroom-ai), then full paths from EXTRA_BINS, then
 // bare names resolved via PATH.
-function pythonCandidates() {
+// The interpreter the CLI itself runs under. `pip install` puts a launcher
+// script in a bin dir (e.g. ~/.local/bin/headroom) whose shebang names the venv
+// python that really holds headroom-ai and the compression extras — while
+// `dirname(binary)/python3` does not exist (the venv lives elsewhere). Without
+// this, detection falls back to a system python that has neither, and the
+// dashboard reports "[code] / [ml] not installed" even though the proxy is
+// running them.
+export function pythonFromShebang(binary, readFile = null) {
+  if (!binary || IS_WIN) return null;
+  try {
+    const read = readFile || ((p) => fs.readFileSync(p, "utf8"));
+    const first = String(read(binary)).split("\n", 1)[0] || "";
+    const match = first.match(/^#!\s*(\S+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function pythonCandidates() {
   const list = [];
   const bin = findHeadroomBinary();
   if (bin) {
+    const fromShebang = pythonFromShebang(bin);
+    if (fromShebang) list.push(fromShebang);
     const dir = path.dirname(bin);
     const names = IS_WIN ? ["python.exe", "python3.exe"] : ["python3", "python3.13", "python"];
     for (const n of names) list.push(path.join(dir, n));

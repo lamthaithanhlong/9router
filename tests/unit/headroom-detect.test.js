@@ -15,7 +15,7 @@ vi.mock("child_process", () => ({
   execFileSync: mocks.execFileSync,
 }));
 
-import { findPython310, getHeadroomStatus, getInstalledHeadroomExtras, isLoopbackHeadroomUrl } from "../../src/lib/headroom/detect.js";
+import { findPython310, getHeadroomStatus, getInstalledHeadroomExtras, isLoopbackHeadroomUrl, pythonFromShebang, pythonCandidates } from "../../src/lib/headroom/detect.js";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -103,5 +103,43 @@ describe("headroom detect", () => {
     expect(isLoopbackHeadroomUrl("http://127.0.0.1:8787")).toBe(true);
     expect(isLoopbackHeadroomUrl("http://headroom:8787")).toBe(false);
     expect(isLoopbackHeadroomUrl("not-a-url")).toBe(false);
+  });
+
+  it("reads the interpreter from the CLI shebang (a pip launcher is not next to its python)", () => {
+    const shebang = "/Users/x/.9router/headroom/venv/bin/python";
+    const readFile = (p) => {
+      if (p === "/Users/x/.local/bin/headroom") return `#!${shebang}\n# -*- coding: utf-8 -*-\nimport sys\n`;
+      throw new Error("ENOENT");
+    };
+    expect(pythonFromShebang("/Users/x/.local/bin/headroom", readFile)).toBe(shebang);
+    expect(pythonFromShebang("/Users/x/.local/bin/headroom", () => { throw new Error("EACCES"); })).toBeNull();
+    expect(pythonFromShebang(null, readFile)).toBeNull();
+  });
+
+  it("tries the shebang interpreter before the system pythons", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    // A real launcher file, because the shebang is read with node:fs.
+    const dir = mkdtempSync(join(tmpdir(), "headroom-launcher-"));
+    const launcher = join(dir, "headroom");
+    const shebang = "/Users/x/.9router/headroom/venv/bin/python";
+    writeFileSync(launcher, `#!${shebang}\nimport sys\n`);
+
+    mocks.execSync.mockImplementation((cmd) => {
+      if (String(cmd).includes("which") || String(cmd).includes("where")) return Buffer.from(`${launcher}\n`);
+      if (String(cmd).includes("--version")) return Buffer.from("Python 3.13.0\n");
+      throw new Error("unexpected execSync");
+    });
+    mocks.execFileSync.mockImplementation((py, args) => {
+      if (args.join(" ") === "-m pip show headroom-ai") {
+        if (py === shebang) return Buffer.from("Name: headroom-ai\nVersion: 0.26.0\n");
+        throw new Error(`not installed in ${py}`);
+      }
+      throw new Error(`unexpected execFileSync: ${py}`);
+    });
+
+    expect(pythonCandidates()[0]).toBe(shebang);
+    expect(findPython310()).toBe(shebang);
   });
 });
