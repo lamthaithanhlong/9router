@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createCostTracker } from "../../plugin/jev-orchestrator/lib/cost.js";
+import { createCostTracker, matchUsage } from "../../plugin/jev-orchestrator/lib/cost.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jev-cost-"));
 
@@ -62,24 +62,60 @@ test("a raw ~ path is expanded here too, so a caller that forgets expandHome los
   assert.equal(t.snapshot(), 3, "the tilde was expanded and the database opened");
 });
 
-test("reconcile: sums only rows after the watermark; unmatched rows count too (parallel children)", async () => {
+test("reconcile: matches THIS route's 9Router rows, and charges NOTHING when none match", async () => {
+  // The rows are what 9Router really writes: the RESOLVED upstream call, never our combo name.
   const file = await buildDb([
-    { id: 1, ts: "2026-10-07T10:00:01.000Z", provider: "router9", model: "cursor-workers", cost: 0.10 },
-    { id: 2, ts: "2026-10-07T10:00:02.000Z", provider: "router9", model: "cursor-workers", cost: 0.20 },
-    { id: 3, ts: "2026-10-07T10:00:03.000Z", provider: "deepseek-host", model: "deepseek-v4.1-flash", cost: 0.05 },
-    { id: 4, ts: "2026-10-07T10:00:04.000Z", provider: "router9", model: "cursor-workers", cost: 0.30 },
+    { id: 1, ts: "2026-10-07T10:00:01.000Z", provider: "codex", model: "gpt-6.1-sol", cost: 0.10 },
+    { id: 2, ts: "2026-10-07T10:00:02.000Z", provider: "codex", model: "gpt-6.1-sol", cost: 0.20 },
+    { id: 3, ts: "2026-10-07T10:00:03.000Z", provider: "openai-compatible-chat-8ec45c8c", model: "deepseek-v4.1-flash", cost: 0.05 },
+    { id: 4, ts: "2026-10-07T10:00:04.000Z", provider: "cursor", model: "claude-4.6-opus-max", cost: 0.30 },
+    { id: 5, ts: "2026-10-07T10:00:05.000Z", provider: "deepseek-account", model: "deepseek-flash", cost: 9.99 }, // the head agent itself
   ]);
   const t = createCostTracker({ cost: { dbFile: file } }, { log: () => {} });
 
-  // Watermark at 1: rows 2..4; with provider/model given, only cursor-workers match -> 0.20 + 0.30.
-  let r = await t.reconcile(1, { routeKey: "cursor", provider: "router9", model: "cursor-workers" });
-  assert.equal(r.usd, 0.50);
+  // Route codex, described the way lib/config.js describes it now.
+  let r = await t.reconcile(0, { routeKey: "codex", usage: { provider: "codex" } });
+  assert.ok(Math.abs(r.usd - 0.30) < 1e-9, `0.10 + 0.20, got ${r.usd}`);
   assert.equal(r.calls, 2);
+  assert.equal(r.unmatched, 3, "other apps' rows are reported, never charged");
 
-  // Same watermark, but with provider/model NOT matching any of the rows -> all post-watermark rows count.
-  r = await t.reconcile(1, { routeKey: "weird", provider: "nowhere", model: "none" });
-  assert.equal(r.usd, 0.55); // 0.20 + 0.05 + 0.30
-  assert.equal(r.calls, 3);
+  // Route deepseek: the 9Router node uuid changes, so config matches prefix + model.
+  r = await t.reconcile(0, { routeKey: "deepseek", usage: { provider: "openai-compatible-chat-*", model: "deepseek-v4.1-flash" } });
+  assert.equal(r.usd, 0.05);
+  assert.equal(r.calls, 1);
+
+  // Nothing matches -> the window is NOT charged. This is the bug that billed one worker $3.5211
+  // of other processes' traffic on 2026-10-07 and knocked the run off the only money route.
+  r = await t.reconcile(0, { routeKey: "weird", usage: { provider: "nowhere", model: "none" } });
+  assert.equal(r.usd, 0);
+  assert.equal(r.calls, 0);
+  assert.equal(r.unmatched, 5);
+});
+
+test("reconcile: a retry combo reports one logical call as N upstream attempts", async () => {
+  // Measured on a second Mac 2026-10-10: one 52,794-token prompt, 7 upstream rows of $0.110868,
+  // zero output tokens. The wallet must see the 7x, and the learned per-call cost must then make
+  // the per-call cap refuse that route.
+  const rows = [1, 2, 3, 4, 5, 6, 7].map((id) => ({ id, provider: "deepseek_tur_host", model: "deepseek-v4.1-flash", cost: 0.110868 }));
+  const file = await buildDb(rows);
+  const t = createCostTracker({ cost: { dbFile: file } }, { log: () => {} });
+  const r = await t.reconcile(0, { routeKey: "deepseek", usage: { provider: "deepseek_tur_host" } });
+  assert.equal(r.calls, 7, "seven upstream rows for one prompt");
+  assert.ok(Math.abs(r.usd - 0.776076) < 1e-9, "the money is summed, not averaged away");
+  assert.ok(t.assumeUsd("deepseek") > 0.02, "the next call on that route is over the call cap");
+});
+
+test("matchUsage: exact, list, trailing-* glob, case-insensitive; an empty descriptor is nothing", () => {
+  const row = { provider: "openai-compatible-chat-8ec45c8c", model: "deepseek-v4.1-flash" };
+  assert.equal(matchUsage(row, { provider: "openai-compatible-chat-8ec45c8c" }), true);
+  assert.equal(matchUsage(row, { provider: "openai-compatible-chat-*", model: "deepseek-v4.1-flash" }), true);
+  assert.equal(matchUsage(row, { provider: ["cursor", "opencode"] }), false);
+  assert.equal(matchUsage(row, { provider: "OPENAI-COMPATIBLE-CHAT-8EC45C8C" }), true, "case-insensitive");
+  assert.equal(matchUsage(row, { model: "deepseek*" }), true);
+  assert.equal(matchUsage(row, { provider: ["cursor", "codex"] }), false);
+  assert.equal(matchUsage(row, {}), false, "an empty descriptor describes nothing");
+  assert.equal(matchUsage(row, null), false);
+  assert.equal(matchUsage(row, { model: "gpt-6.1-sol" }), false);
 });
 
 test("assumeUsd: cfg override beats the rolling average, then average, then 0", async () => {
@@ -147,7 +183,7 @@ test("recentCalls: newest-first list of calls with token counts and cost", async
 test("every method is the zero / null answer when the DB file does not exist", async () => {
   const t = createCostTracker({ cost: { dbFile: "/nonexistent/never.sqlite" } }, { log: () => {} });
   assert.equal(t.snapshot(), -1);
-  assert.deepEqual(await t.reconcile(0, { routeKey: "x" }), { usd: 0, calls: 0 });
+  assert.deepEqual(await t.reconcile(0, { routeKey: "x" }), { usd: 0, calls: 0, unmatched: 0 });
   assert.equal(t.assumeUsd("x"), 0);
   assert.equal(await t.dayUsd(), null);
   assert.deepEqual(await t.recentCalls(5), []);
@@ -161,7 +197,7 @@ test("every method logs once, never throws, when the DB exists and is corrupt", 
   const seen = [];
   const t = createCostTracker({ cost: { dbFile: corrupt } }, { log: (m) => seen.push(m) });
   assert.equal(t.snapshot(), -1);
-  assert.deepEqual(await t.reconcile(0, { routeKey: "x" }), { usd: 0, calls: 0 });
+  assert.deepEqual(await t.reconcile(0, { routeKey: "x" }), { usd: 0, calls: 0, unmatched: 0 });
   assert.equal(t.assumeUsd("x"), 0);
   assert.equal(await t.dayUsd(), null);
   assert.deepEqual(await t.recentCalls(5), []);

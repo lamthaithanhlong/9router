@@ -27,6 +27,26 @@ function expandHome(p) {
   return typeof p === "string" && p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
 }
 
+// Does one `usageHistory` row belong to this route? `usage` is { provider?, model? }; each field
+// is an exact string, a list of them, or a single trailing-* glob, compared case-insensitively.
+// A field that is absent does not constrain the match; an empty descriptor matches nothing.
+// Exported so the tests can pin this down without a live 9Router DB.
+export function matchUsage(row, usage) {
+  if (!usage || typeof usage !== "object") return false;
+  const ok = (value, patterns) => {
+    const list = Array.isArray(patterns) ? patterns : [patterns];
+    const v = String(value ?? "").toLowerCase();
+    return list.some((p) => {
+      const s = String(p ?? "").toLowerCase();
+      if (!s) return false;
+      return s.endsWith("*") ? v.startsWith(s.slice(0, -1)) : v === s;
+    });
+  };
+  const fields = ["provider", "model"].filter((f) => usage[f] !== undefined);
+  if (fields.length === 0) return false;
+  return fields.every((f) => ok(row[f], usage[f]));
+}
+
 export function createCostTracker(cfg, { log = () => {} } = {}) {
   const costCfg = cfg.cost || {};
   const configured = typeof costCfg.dbFile === "string" && costCfg.dbFile ? costCfg.dbFile : "~/.9router/db/data.sqlite";
@@ -63,29 +83,44 @@ export function createCostTracker(cfg, { log = () => {} } = {}) {
       }
     },
 
-    // Sum cost rows with id > sinceId. Rows are attributed by provider/model when both are
-    // given and at least one matching row exists; otherwise the whole post-watermark window
-    // counts (children run in parallel, so an unmatched row is still this run's spend).
-    async reconcile(sinceId, { routeKey, provider, model } = {}) {
-      if (!db) return { usd: 0, calls: 0 };
+    // Sum the cost rows with id > sinceId that belong to THIS route. Attribution is the whole
+    // problem here, and getting it wrong is worse than getting it zero:
+    //   9Router logs the RESOLVED upstream call, not the combo we asked for. Our route "codex" is
+    //   router9/codex-head, but the row says provider "codex", model "gpt-6.1-sol"; our route
+    //   "deepseek" is deepseek-host/deepseek-v4.1-flash, and the row says provider
+    //   "openai-compatible-chat-<uuid>". Matching on our own identifiers matched ZERO rows of the
+    //   2457+ in this DB, and the old fallback then counted EVERY row in the window - the head
+    //   agent's own calls and every other app on the machine included. On 2026-10-07 one worker
+    //   was billed $3.5211 that way, the task wallet blew past its $0.10 cap, and the run was
+    //   pushed off deepseek onto Cursor, where it hung 627s and produced nothing.
+    // So: match with the route's `usage` descriptor, and when nothing matches charge NOTHING and
+    // report `unmatched`. Under-charging hides spend; over-charging silently kills the run.
+    async reconcile(sinceId, { routeKey, usage, provider, model } = {}) {
+      if (!db) return { usd: 0, calls: 0, unmatched: 0 };
       try {
         const rows = db.prepare("SELECT id, cost, provider, model FROM usageHistory WHERE id > ? ORDER BY id ASC").all(sinceId);
-        const matched = (rows.length && provider && model)
-          ? rows.filter((r) => r.provider === provider && r.model === model)
-          : rows;
-        const use = matched.length > 0 ? matched : rows;
+        const desc = usage ?? (provider && model ? { provider, model } : null);
+        const use = desc ? rows.filter((r) => matchUsage(r, desc)) : [];
+        if (use.length === 0) {
+          if (rows.length > 0) {
+            note(`cost: no 9Router row matched route ${routeKey ?? "?"} (${JSON.stringify(desc)}); charged $0 for ${rows.length} row(s) in the window`);
+          }
+          return { usd: 0, calls: 0, unmatched: rows.length };
+        }
         const usd = use.reduce((s, r) => s + (Number(r.cost) || 0), 0);
         const calls = use.length;
-        // Learn per-call cost for this route (exponential average, weight 0.5).
-        if (calls > 0 && routeKey) {
+        // Learn per-call cost for this route (exponential average, weight 0.5). One logical call
+        // that a retry combo turned into N upstream rows teaches N times the prompt price here,
+        // which is exactly what should make the per-call cap refuse that route next time.
+        if (routeKey) {
           const per = usd / calls;
           const prev = avg.get(routeKey);
           avg.set(routeKey, prev === undefined ? per : prev * 0.5 + per * 0.5);
         }
-        return { usd, calls };
+        return { usd, calls, unmatched: rows.length - calls };
       } catch (err) {
         note(`cost.reconcile failed: ${err.message || err}`);
-        return { usd: 0, calls: 0 };
+        return { usd: 0, calls: 0, unmatched: 0 };
       }
     },
 

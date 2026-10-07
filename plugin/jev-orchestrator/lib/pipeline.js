@@ -23,13 +23,13 @@ async function runAgent(deps, role, message, label, opts = {}) {
   const skip = [...(opts.skipRoutes ?? [])];
   const attempts = [];
   for (;;) {
-    const res = resolveRole(role, cfg, deps.ledger, need, { skip, health: deps.health });
+    const res = resolveRole(role, cfg, deps.ledger, need, { skip, health: deps.health, rotation: deps.rotation });
     if (res.kind === "hold") {
       const reason = skip.length ? `${role}: every route failed or is out of budget (${attempts.join("; ")})` : res.reason;
       return { status: "held", reason };
     }
     const { route } = res;
-    deps.log(`${role} -> ${route.key}${res.fellBack ? " (fallback)" : ""}`);
+    deps.log(`${role} -> ${route.key}${route.via ? ` (via ${route.via}, turn ${route.turn})` : ""}${res.fellBack ? " (fallback)" : ""}`);
 
     // Part D: ask a known-flaky route whether it answers at all, before spending a child on it.
     // The Cursor route can return HTTP 200 with no text; a child that discovers that the slow way
@@ -70,13 +70,15 @@ async function runAgent(deps, role, message, label, opts = {}) {
       }
     }
     // Record the start before any expensive work, so `node watch.mjs` shows it instantly.
-    deps.steps?.step(`${label} started on ${route.key}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd: costOn ? deps.cost.assumeUsd(route.key) : 0, taskUsd: deps.cost?.taskUsd() ?? 0 });
+    deps.steps?.step(`${label} started on ${route.key}${route.via ? ` (via ${route.via})` : ""}`, { ...(route.via ? { via: route.via, turn: route.turn } : {}), run: deps.runId, role, label, route: route.key, model: route.model, usd: costOn ? deps.cost.assumeUsd(route.key) : 0, taskUsd: deps.cost?.taskUsd() ?? 0 });
 
     let text = "";
     let tokensReal = null;
     let failure;
     let usd = 0;
     let calls = 0;
+    let upstreamAttempts = 0; // upstream rows one logical call wrote: a retry combo writes several
+    let unmatched = 0; // rows in the window that could not be attributed to this route
     // Watermark: any usageHistory row written AFTER this id is this call's spend.
     const watermark = deps.cost?.snapshot?.() ?? -1;
     // Wait for a slot on this route's upstream before starting the child (queue, never refuse).
@@ -111,10 +113,20 @@ async function runAgent(deps, role, message, label, opts = {}) {
       // the child's reply. Even when the call failed, a row was written.
       if (deps.cost && watermark >= 0) {
         try {
-          const r = await deps.cost.reconcile(watermark, { routeKey: route.key, provider: route.provider, model: route.model });
+          const r = await deps.cost.reconcile(watermark, { routeKey: route.key, usage: route.usage, provider: route.provider, model: route.model });
           usd = r?.usd ?? 0;
           calls = r?.calls ?? 0;
-          deps.cost.chargeTaskUsd(usd);
+          upstreamAttempts = calls;
+          unmatched = r?.unmatched ?? 0;
+          // ONLY a route that costs real money feeds the task wallet. A free or quota route still
+          // reports the list price 9Router wrote (the owner must see it), but that number is fiction:
+          // charging it once put a $0.1097 Codex "cost" over the $0.10 task cap, which knocked the run
+          // off deepseek - the only route that costs real money - onto Cursor, where it hung 627s and
+          // produced nothing. Measured 2026-10-07 on this machine.
+          if (route.cost === "money") deps.cost.chargeTaskUsd(usd);
+          if (unmatched > 0) {
+            deps.steps?.step(`cost: ${unmatched} row(s) in the window did not match ${route.key}; charged $0`, { run: deps.runId, role, label, route: route.key, usd: 0, taskUsd: deps.cost.taskUsd() });
+          }
         } catch { /* the tracker already logs once; the run continues */ }
       }
       // A child that failed still consumed its input.
@@ -134,9 +146,10 @@ async function runAgent(deps, role, message, label, opts = {}) {
         tokensIn: tokensReal ? tokensReal.tokensIn : inTokens,
         tokensOut: tokensReal ? tokensReal.tokensOut : estimateTokens(text),
         ...(calls > 0 ? { usd } : {}),
+        ...(upstreamAttempts > 1 ? { attempts: upstreamAttempts } : {}),
       });
       // The step feed is the owner's free live view: every call has a start line and a done line.
-      deps.steps?.step(`${label} ${failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });
+      deps.steps?.step(`${label} ${failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${upstreamAttempts > 1 ? ` (${upstreamAttempts} upstream attempts)` : ""}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });
     }
     if (!failure) {
       if (route.backup && !deps.notes.some((n) => n.startsWith(`${role} ran on the BACKUP`))) {
