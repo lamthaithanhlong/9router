@@ -68,7 +68,7 @@ export function createCostTracker(cfg, { log = () => {} } = {}) {
 
   // Last observed USD-per-call per route key (exponential average, weight 0.5).
   const avg = new Map();
-  let spent = 0; // accumulator for the current jev_run (the "task")
+  let spent = 0; // accumulator for the current david_run (the "task")
 
   return {
     // Highest usageHistory.id seen, or -1 if the DB is missing. Used as a watermark.
@@ -133,7 +133,7 @@ export function createCostTracker(cfg, { log = () => {} } = {}) {
       return typeof a === "number" ? a : 0;
     },
 
-    // Accumulator for the current jev_run.
+    // Accumulator for the current david_run.
     chargeTaskUsd(usd) { if (Number.isFinite(usd)) spent += usd; },
     taskUsd() { return spent; },
 

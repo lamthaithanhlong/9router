@@ -94,7 +94,7 @@ async function until(fn, ms = 3000) {
 }
 
 test("dashboard: /state and / answer, /events opens an SSE frame, and it stops cleanly", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "jev-dash-"));
+  const dir = mkdtempSync(join(tmpdir(), "david-dash-"));
   const stepsFile = join(dir, "steps.jsonl");
   writeFileSync(stepsFile, [
     step({ text: "run started" }),
@@ -145,7 +145,7 @@ test("dashboard: /state and / answer, /events opens an SSE frame, and it stops c
 });
 
 test("dashboard: a step appended while a page is connected also refreshes the snapshot (cards and FLOW follow the run)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "jev-dash-live-"));
+  const dir = mkdtempSync(join(tmpdir(), "david-dash-live-"));
   const stepsFile = join(dir, "steps.jsonl");
   writeFileSync(stepsFile, [step({ text: "run started" }), step({ text: "worker-1 started on deepseek", role: "worker", label: "worker-1", route: "deepseek" })].join("\n") + "\n");
   writeFileSync(join(dir, "runs.jsonl"), "");
@@ -196,7 +196,7 @@ test("page: the script compiles and every $(\"id\") it reads exists in the marku
 });
 
 test("dashboard: the first page to connect is not sent the whole backlog again as new steps", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "jev-dash-backlog-"));
+  const dir = mkdtempSync(join(tmpdir(), "david-dash-backlog-"));
   const stepsFile = join(dir, "steps.jsonl");
   writeFileSync(stepsFile, Array.from({ length: 30 }, (_, i) => step({ text: `old line ${i}`, role: "worker", label: "worker-1" })).join("\n") + "\n");
   writeFileSync(join(dir, "runs.jsonl"), "");

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Free, live HTML dashboard for jev_run. Dependency-free: only node:http, node:fs
+// Free, live HTML dashboard for david_run. Dependency-free: only node:http, node:fs
 // and (when 9Router's DB exists) node:sqlite, all read-only. The page is read
 // from disk on every request so editing it never needs a restart. State comes
-// from `lib/telemetry.js`, the same helper the CLI watcher and `jev_watch` use,
+// from `lib/telemetry.js`, the same helper the CLI watcher and `david_watch` use,
 // so the page and the tool cannot disagree.
 //
 //   node ui.mjs              serve on 127.0.0.1:8787 (default)

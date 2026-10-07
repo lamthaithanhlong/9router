@@ -1,7 +1,7 @@
 // Caps how many children run at once on one upstream, and spaces their starts out, so a burst of
 // workers cannot hammer a rate-limited account (Cursor rate-limited the owner after unbounded fan-out).
 // Routes that share an upstream share a `group` (cursor-workers is Cursor, codex-head is Codex).
-// One instance serves every jev_run in the process, so two simultaneous runs share the same cap.
+// One instance serves every david_run in the process, so two simultaneous runs share the same cap.
 export class Limiter {
   constructor({ limits = {}, gaps = {}, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
     this.limits = limits; // group -> max concurrent children (absent = unlimited)

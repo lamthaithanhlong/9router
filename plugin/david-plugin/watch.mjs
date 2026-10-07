@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Live, free view of what a jev_run is doing right now.
+// Live, free view of what a david_run is doing right now.
 //
 //   node watch.mjs            follow until Ctrl-C
 //   node watch.mjs --once     print the recent history and exit
@@ -10,14 +10,18 @@
 //   1. 9Router's usageHistory - every upstream call (planner/worker/reviewer),
 //      with prompt/completion tokens and the USD cost. Tokens and dollars come
 //      ONLY from usageHistory; streaming rows record 0/0 in requestDetails.
-//   2. ~/.dsh/jev-ledger.json - the day's spend per route, written on every charge.
-//   3. ~/.dsh/jev-runs.jsonl  - finished runs, appended at the end of each run.
-//   4. ~/.dsh/jev-steps.jsonl - one line per pipeline transition, tailed by byte
+//   2. ~/.dsh/david-ledger.json - the day's spend per route, written on every charge.
+//   3. ~/.dsh/david-runs.jsonl  - finished runs, appended at the end of each run.
+//   4. ~/.dsh/david-steps.jsonl - one line per pipeline transition, tailed by byte
 //      offset so the file is read at most once per tick. The reader lives in
 //      `lib/telemetry.js` (same helper the HTML dashboard uses), so a torn
 //      trailing line is held back here and shown only when the writer flushes.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { tailSteps, STEPS_FILE, RUNS_FILE, LEDGER_FILE } from "./lib/telemetry.js";
+import { migrateLegacyFiles } from "./lib/legacy.js";
+
+// This viewer may be the first thing to run after the 0.9.0 rename: bring the old history across before reading.
+migrateLegacyFiles([LEDGER_FILE, RUNS_FILE, STEPS_FILE]);
 
 const argv = process.argv.slice(2);
 const once = argv.includes("--once");
@@ -128,7 +132,7 @@ function pollSteps() {
   }
 }
 
-line(`watching: ${process.env.JEV_9ROUTER_DB || "~/.9router/db/data.sqlite"}\n          ${LEDGER_FILE}\n          ${RUNS_FILE}\n          ${STEPS_FILE}\n(reads only; no model call, no quota)\n`);
+line(`watching: ${process.env.DAVID_9ROUTER_DB || "~/.9router/db/data.sqlite"}\n          ${LEDGER_FILE}\n          ${RUNS_FILE}\n          ${STEPS_FILE}\n(reads only; no model call, no quota)\n`);
 pollRouter(); pollLedger(); pollRuns(); pollSteps();
 if (once) process.exit(0);
 setInterval(() => { pollRouter(); pollLedger(); pollRuns(); pollSteps(); }, pollMs);

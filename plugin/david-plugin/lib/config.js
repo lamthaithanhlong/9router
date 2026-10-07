@@ -9,7 +9,7 @@ export const NAME = "david-plugin";
 // route keys (CHAINS), cheapest acceptable first.
 export const DEFAULTS = {
   subagentProvider: "spawn",
-  toolName: "jev_run",
+  toolName: "david_run",
   toolTimeoutMs: 3_600_000,
 
   routes: {
@@ -96,15 +96,15 @@ export const DEFAULTS = {
     api_deepseek: { unit: "tokens", daily: 200_000, reserveFraction: 0, reserveFor: [] },
     api_openrouter: { unit: "tokens", daily: 200_000, reserveFraction: 0, reserveFor: [] },
   },
-  ledgerFile: "~/.dsh/jev-ledger.json",
-  runLog: "~/.dsh/jev-runs.jsonl", // one line per jev_run: who ran, on what, how long
+  ledgerFile: "~/.dsh/david-ledger.json",
+  runLog: "~/.dsh/david-runs.jsonl", // one line per david_run: who ran, on what, how long
 
   // Tools a child agent is not offered. Measured in the real Harness: without this a
-  // worker is offered jev_run, subagent, subagent_fork and workflow, i.e. it can start
+  // worker is offered david_run, subagent, subagent_fork and workflow, i.e. it can start
   // more agents on models nobody budgeted. Roles other than worker also lose the
   // file-writing tools: a reviewer or researcher that edits files defeats its role.
   childTools: {
-    denyAll: ["jev_run", "subagent", "subagent_fork", "workflow"],
+    denyAll: ["david_run", "subagent", "subagent_fork", "workflow"],
     denyNonWorker: ["write", "edit"],
   },
 
@@ -117,7 +117,7 @@ export const DEFAULTS = {
     testTimeoutMs: 600_000,
     // After a route fails at run time it is skipped for this long, so the next calls go straight to the next route.
     routeCooldownMs: 600_000,
-    // Children running at once per upstream group, across ALL jev_run calls. More are queued, not refused.
+    // Children running at once per upstream group, across ALL david_run calls. More are queued, not refused.
     // Cursor (cursor-workers) is capped at 3 because it rate-limited the owner.
     concurrency: { cursor: 3, codex: 2, deepseek: 2, backup: 2, cursorqueue: 3 },
     // Minimum gap between two child starts in a group, so a burst is spread out instead of landing at once.
@@ -179,8 +179,8 @@ export const DEFAULTS = {
   heuristics: { planChars: 400 },
 
   // One file in JSON Lines per call the pipeline is about to make or just made, so
-  // `node watch.mjs` and `jev_watch` can show progress for free (no model call).
-  stepsFile: "~/.dsh/jev-steps.jsonl",
+  // `node watch.mjs` and `david_watch` can show progress for free (no model call).
+  stepsFile: "~/.dsh/david-steps.jsonl",
 
   // Real dollar cost: read from 9Router's SQLite (`usageHistory`, `usageDaily`) and
   // throttled per child call and per task. Caps only apply to `cost === "money"`
@@ -189,7 +189,7 @@ export const DEFAULTS = {
     enabled: true,            // when false: tracker methods still work, but the caps below are inert
     dbFile: "~/.9router/db/data.sqlite", // where 9Router keeps its call log
     callUsd: 0.001,           // cap for ONE child call; over it -> next affordable route on the chain
-    taskUsd: 0.08,            // cap for ONE jev_run (all roles, all calls); over it -> awaiting_human
+    taskUsd: 0.08,            // cap for ONE david_run (all roles, all calls); over it -> awaiting_human
     enforce: true,            // false = warn only, never refuse the call
     // Manual USD-per-call per route. Wins over the rolling average the tracker learns in-process.
     assume: {},               // { routeKey: usdPerCall } -- e.g. { cursor: 0.0335 }
@@ -212,7 +212,7 @@ export const DEFAULTS = {
 
   // The live dashboard (lib/dashboard.js + lib/ui/index.html): a tiny read-only HTTP server inside
   // this process that shows a run while it happens. The owner asked for the link on every run, so
-  // jev_run prints it. It reads the same four files jev_watch reads and never makes a model call,
+  // david_run prints it. It reads the same four files david_watch reads and never makes a model call,
   // which is what makes it free to leave open.
   dashboard: { enabled: true, port: 8787 },
 

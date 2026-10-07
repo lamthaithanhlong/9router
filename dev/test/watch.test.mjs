@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
 test("--once prints the last 20 calls, newest data, with a date for old rows", () => {
-  const dir = mkdtempSync(join(tmpdir(), "jev-watch-"));
+  const dir = mkdtempSync(join(tmpdir(), "david-watch-"));
   const file = join(dir, "data.sqlite");
   const db = new DatabaseSync(file);
   db.exec("create table usageHistory (id integer primary key autoincrement, provider text, model text, promptTokens int, completionTokens int, cost real, timestamp text)");
@@ -18,7 +18,7 @@ test("--once prints the last 20 calls, newest data, with a date for old rows", (
   db.close();
   const out = execFileSync("node", ["plugin/david-plugin/watch.mjs", "--once"], {
     encoding: "utf8",
-    env: { ...process.env, JEV_9ROUTER_DB: file, HOME: dir },
+    env: { ...process.env, DAVID_9ROUTER_DB: file, HOME: dir },
   });
   const calls = out.split("\n").filter((l) => /  call   /.test(l));
   assert.equal(calls.length, 20);

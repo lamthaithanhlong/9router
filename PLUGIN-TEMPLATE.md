@@ -34,10 +34,10 @@ Có thể export thêm `Config` (schema schemastery) để Harness kiểm cấu 
 | Provider subagent mặc định tên `spawn` (`subagent-spawn-in-process`) có sẵn trong bundle `dsh-base` | `--dump-config` profile `web` | §8 lệnh 3 |
 | `steer()`/`followup()` của `Agent` nhận `{content:[{type:"text",text}], source:{kind:"plugin", plugin:"…"}}`, **không** nhận chuỗi | README `dsh-agent` | đọc README |
 | Agent con chạy qua `spawn` **theo đúng route** plugin yêu cầu (`agentOptions`), và **tôn trọng `toolFilter.deny`** | chạy thật trong Harness với model giả: yêu cầu của worker tới `cursor-workers`, reviewer tới `deepseek-v4.1-flash`/`codex-head`; tool bị chặn không còn trong danh sách của con | `dev/e2e/run.sh` (§12) |
-| Mặc định agent con được cấp **cả** `jev_run`, `subagent`, `subagent_fork`, `workflow` (tức có thể đẻ thêm agent trên model không ai tính ngân sách) | cùng phép chạy, trước khi thêm bộ lọc | §12 |
+| Mặc định agent con được cấp **cả** `david_run`, `subagent`, `subagent_fork`, `workflow` (tức có thể đẻ thêm agent trên model không ai tính ngân sách) | cùng phép chạy, trước khi thêm bộ lọc | §12 |
 | Agent con **không** bắt đầu trong thư mục `cwd` mà tool nhận, mà trong thư mục làm việc của agent đầu (`pwd` của worker in ra thư mục của agent đầu) | cùng phép chạy | §12; vì vậy prompt bắt worker `cd <cwd> &&` |
-| `dsh headless --patch x.yml "<việc>"` với `DSH_HOME` tạm chạy trọn một lượt agent; Harness đưa `jev_run` vào danh sách tool của model | `dev/e2e/run.sh` | §12 |
-| Ở profile **desktop**, bộ lọc tool của child chỉ được nêu tên tool "toàn cục". `subagent`, `subagent_fork`, `workflow` nằm ở lớp riêng của child nên `tools.restrict()` ném `names unknown global tool "subagent"; known global tools: …` và child **không khởi động** | sổ chạy thật (`jev-runs.jsonl`): cả hai route chết sau 2–3 ms | kịch bản F (§12) |
+| `dsh headless --patch x.yml "<việc>"` với `DSH_HOME` tạm chạy trọn một lượt agent; Harness đưa `david_run` vào danh sách tool của model | `dev/e2e/run.sh` | §12 |
+| Ở profile **desktop**, bộ lọc tool của child chỉ được nêu tên tool "toàn cục". `subagent`, `subagent_fork`, `workflow` nằm ở lớp riêng của child nên `tools.restrict()` ném `names unknown global tool "subagent"; known global tools: …` và child **không khởi động** | sổ chạy thật (`david-runs.jsonl`): cả hai route chết sau 2–3 ms | kịch bản F (§12) |
 | Phản hồi rỗng từ Cursor bị Harness coi là `EMPTY_RESPONSE` và thử lại 9 lần; 9Router thấy HTTP 200 nên combo `fallback` không chuyển model | 8 chuỗi 9 request cùng cỡ prompt, độ trễ ~220 ms (§11.9) | `dev/…` không có; đọc `requestDetails` |
 | Route model của máy này: provider `router9` (9Router) với model `codex-head`, `cursor-workers`, `manager-temp`, `full`; provider `deepseek-host` với `deepseek-v4.1-flash` | `~/.dsh/profiles/desktop/cordis.patch.yml` | đọc file |
 | Laya = server local `127.0.0.1:8130`, `POST /v1/systemone` với `{state, questions:{id:{type:"noul",instructions}}}` → `answers[id].noul` là xác suất "có" | gọi thật 14 lần (§11.5) | `laya-ctl status` |
@@ -194,7 +194,7 @@ Phần này mô tả cách máy này đang chạy và cách nên đặt. **Đo**
 
 ```mermaid
 flowchart TB
-  A["Agent đầu của Harness<br/>(model mặc định: agent-default-model)"] -->|"gọi tool jev_run"| P["plugin david-plugin<br/>vai · ngân sách · gate"]
+  A["Agent đầu của Harness<br/>(model mặc định: agent-default-model)"] -->|"gọi tool david_run"| P["plugin david-plugin<br/>vai · ngân sách · gate"]
   P -->|"worker"| R9
   P -->|"planner / researcher / final_reviewer"| R9
   P -->|"reviewer (trả tiền)"| DS["deepseek-host<br/>modelapi.vn, gọi thẳng"]
@@ -284,7 +284,7 @@ for v in ROUTER9_API_KEY DEEPSEEK_HOST_API_KEY; do [ -n "${!v:-}" ] && echo "$v:
 | `manager-temp` | fallback | `cu/default`, rồi vài model OpenRouter/OpenCode `:free` | là đường lui miễn phí của planner/researcher khi hết quota Codex; không bao giờ rơi xuống Codex hay DeepSeek |
 | `full` | giữ làm "tất cả", **không dùng làm mặc định** | bỏ `deepseek/deepseek-v4.1-flash` và các model trả tiền ra khỏi xoay vòng | để DeepSeek chỉ đi qua plugin, nơi có trần chi tiêu |
 
-**Nên đổi `agent-default-model`** từ `router9/full` sang `router9/manager-temp` (miễn phí). Đánh đổi: agent đầu yếu hơn một chút, vì nó chỉ chia việc và gọi `jev_run`; phần tốn model mạnh đã nằm trong plugin. Nếu thấy agent đầu chia việc dở, đổi sang `codex-head` (fallback) và chấp nhận hao quota.
+**Nên đổi `agent-default-model`** từ `router9/full` sang `router9/manager-temp` (miễn phí). Đánh đổi: agent đầu yếu hơn một chút, vì nó chỉ chia việc và gọi `david_run`; phần tốn model mạnh đã nằm trong plugin. Nếu thấy agent đầu chia việc dở, đổi sang `codex-head` (fallback) và chấp nhận hao quota.
 
 Đổi chiến lược combo trong dashboard 9Router (cổng 20128). Tên mục tôi chưa kiểm trực tiếp; đừng sửa file SQLite khi 9Router đang chạy.
 
@@ -336,15 +336,15 @@ Kết luận đã áp vào plugin: `needs_plan` dùng được cho tác vụ **t
 3. **Biến môi trường** cho app Harness: `ROUTER9_API_KEY`, `DEEPSEEK_HOST_API_KEY`. Kiểm bằng lệnh ở §11.2.
 4. **Harness** (`cordis.patch.yml`): entry `llm-pi-ai` đúng như §11.2, id model **trùng tên combo**; entry `agent-default-model` theo §11.3.
 5. **Laya**: `laya-ctl start`, `laya-ctl status` thấy `UP`.
-6. **Plugin**: `./install.sh --keepalive`, khởi động lại Harness, xác nhận có tool `jev_run`.
-7. **Chạy một việc nhỏ** bằng `jev_run` trong repo thử; báo cáo phải `done`, chỉ một agent Cursor chạy, không review.
+6. **Plugin**: `./install.sh --keepalive`, khởi động lại Harness, xác nhận có tool `david_run`.
+7. **Chạy một việc nhỏ** bằng `david_run` trong repo thử; báo cáo phải `done`, chỉ một agent Cursor chạy, không review.
 8. **Sau 24 giờ**, đo lại và chỉnh `budgets` (số hiện tại là giả định):
 
 ```bash
 sqlite3 -readonly -header -column ~/.9router/db/data.sqlite \
  "select provider, model, count(*) n, sum(promptTokens) prompt_tok, round(sum(cost),2) notional_cost
   from usageHistory group by provider, model order by n desc limit 25;"
-cat ~/.dsh/jev-ledger.json    # chi tiêu hôm nay theo route, do plugin ghi
+cat ~/.dsh/david-ledger.json    # chi tiêu hôm nay theo route, do plugin ghi
 ```
 
 ### 11.7 Xem plugin đã chạy những ai
@@ -353,15 +353,15 @@ Có ba nơi, từ nhanh đến chi tiết:
 
 | Nơi | Cho biết | Giới hạn |
 |---|---|---|
-| **Báo cáo của `jev_run`**, mục `Who ran:` | từng vai, route (`provider/model`), khoá route, giây, token ước lượng; Laya trả bao nhiêu; dòng `not called:` liệt kê vai **không** chạy | `model` là tên **combo** (`codex-head`…), không phải model thật phía sau |
-| **Sổ chạy** `~/.dsh/jev-runs.jsonl` (một dòng mỗi lần `jev_run`, kể cả lần lỗi) | như trên, kèm thời điểm bắt đầu/kết thúc, `cwd`, `status`, lỗi | cũng chỉ thấy combo |
+| **Báo cáo của `david_run`**, mục `Who ran:` | từng vai, route (`provider/model`), khoá route, giây, token ước lượng; Laya trả bao nhiêu; dòng `not called:` liệt kê vai **không** chạy | `model` là tên **combo** (`codex-head`…), không phải model thật phía sau |
+| **Sổ chạy** `~/.dsh/david-runs.jsonl` (một dòng mỗi lần `david_run`, kể cả lần lỗi) | như trên, kèm thời điểm bắt đầu/kết thúc, `cwd`, `status`, lỗi | cũng chỉ thấy combo |
 | **`node ~/.dsh/profiles/desktop/plugins/david-plugin/who.mjs [N]`** | N lần chạy gần nhất, cộng với những gì **9Router thực nhận** trong khoảng thời gian đó, theo `provider/model` thật | gộp cả traffic khác trong cùng cửa sổ (ví dụ agent đầu đang chat); `deepseek-host` gọi thẳng nên **không** hiện ở 9Router, chỉ hiện ở báo cáo và sổ chạy |
 
 Cách đọc:
 
 - Vai chạy trên combo nào: báo cáo. Combo đó thực sự chọn model nào: `who.mjs` (hàng `cursor/default`, `codex/gpt-6.1-sol`…). Nếu `codex-head` còn xoay vòng (§11.3), bạn sẽ thấy nhiều model `cx/*` khác nhau trong một lượt.
 - Ví dụ một lượt đúng: `laya needs_plan: p=…`, một dòng `worker-1 -> router9/cursor-workers`, và `not called: planner, researcher, reviewer, final_reviewer`. Nếu thấy `reviewer` hoặc `final_reviewer` mà không có dòng `Review triggers:` thì có lỗi.
-- Chi phí DeepSeek: chỉ báo cáo, sổ chạy và `~/.dsh/jev-ledger.json` (token ước lượng) đếm được; 9Router không thấy.
+- Chi phí DeepSeek: chỉ báo cáo, sổ chạy và `~/.dsh/david-ledger.json` (token ước lượng) đếm được; 9Router không thấy.
 
 ## 12. Chạy thử đầu-cuối trong Harness thật, không cần khoá
 
@@ -371,11 +371,11 @@ Test đơn vị chỉ chứng minh lõi đúng; điều dễ sai nằm ở chỗ
 dev/e2e/run.sh        # cần app DeepSeek Harness, node, git; không đụng ~/.dsh, không dùng khoá hay quota
 ```
 
-Cách hoạt động: dựng profile tạm (`DSH_HOME` tạm) với entry `llm-pi-ai` trỏ mọi provider về một server model **giả** chạy local (`dev/e2e/fake-llm.mjs`, giao thức OpenAI streaming), chèn plugin bằng `--patch`, rồi gọi `dsh headless "<việc>"`. Server giả trả lời theo kịch bản (`dev/e2e/script.mjs`): đóng vai agent đầu (gọi `jev_run`), worker (chạy `bash` sửa file), reviewer (duyệt). Mỗi request đều được ghi lại với tên model và danh sách tool được cấp, nên có thể khẳng định:
+Cách hoạt động: dựng profile tạm (`DSH_HOME` tạm) với entry `llm-pi-ai` trỏ mọi provider về một server model **giả** chạy local (`dev/e2e/fake-llm.mjs`, giao thức OpenAI streaming), chèn plugin bằng `--patch`, rồi gọi `dsh headless "<việc>"`. Server giả trả lời theo kịch bản (`dev/e2e/script.mjs`): đóng vai agent đầu (gọi `david_run`), worker (chạy `bash` sửa file), reviewer (duyệt). Mỗi request đều được ghi lại với tên model và danh sách tool được cấp, nên có thể khẳng định:
 
 | Kịch bản | Khẳng định (`dev/e2e/check.mjs`) |
 |---|---|
-| A: sửa nhỏ | báo cáo `done`; chỉ worker trên `router9/cursor-workers` chạy; không model trả tiền nào bị gọi; worker không được cấp `jev_run`/`subagent`/`subagent_fork`/`workflow`; sổ chi tiêu không được ghi |
+| A: sửa nhỏ | báo cáo `done`; chỉ worker trên `router9/cursor-workers` chạy; không model trả tiền nào bị gọi; worker không được cấp `david_run`/`subagent`/`subagent_fork`/`workflow`; sổ chi tiêu không được ghi |
 | B: sửa dưới `src/auth` | thêm reviewer trên `deepseek-host/deepseek-v4.1-flash` và final reviewer trên `router9/codex-head`; dòng `Review triggers: risky path`; reviewer không được cấp tool ghi file hay tool đẻ agent; sổ chi tiêu có DeepSeek và đúng 1 lượt Codex |
 
 Đã thử phá: bỏ `toolFilter`, đổi route worker, tắt đường dẫn rủi ro: cả ba đều làm `run.sh` báo lỗi.
@@ -389,8 +389,8 @@ Dùng cho plugin khác: chép `dev/e2e/`, sửa `script.mjs` (kịch bản) và 
 | Chỗ | Cách lấy |
 |---|---|
 | `export const version` của plugin | đọc `package.json` lúc nạp |
-| cuối báo cáo `jev_run`: `Plugin: david-plugin <version>` | từ `version` |
-| mỗi dòng sổ chạy `jev-runs.jsonl` (`"version"`) và `who.mjs` (`(plugin <version>)`) | từ `version` |
+| cuối báo cáo `david_run`: `Plugin: david-plugin <version>` | từ `version` |
+| mỗi dòng sổ chạy `david-runs.jsonl` (`"version"`) và `who.mjs` (`(plugin <version>)`) | từ `version` |
 | `install.sh`: `version: 0.2.0 -> 0.3.0` / `new install` / `same version reinstalled` | so `package.json` bản đang cài với bản mới |
 | tên zip `david-plugin-<version>.zip` | `dev/build.sh` |
 | `CHANGELOG.md` | mục `## [<version>] - YYYY-MM-DD` |
@@ -405,7 +405,7 @@ Dùng cho plugin khác: chép `dev/e2e/`, sửa `script.mjs` (kịch bản) và 
 
 `dev/build.sh` **từ chối build** khi version không phải SemVer, khi `CHANGELOG.md` không có mục cho version đó, hoặc khi test hỏng; nó cũng không đóng thư mục `dist/` của các lần build trước vào zip. Test (`dev/test/version.test.mjs`) giữ các chỗ trên khớp nhau: tăng `package.json` mà quên changelog thì test đỏ.
 
-**Lưu ý:** bản đang chạy trong Harness là bản đã nạp vào bộ nhớ; chép bản mới vào profile chưa đổi gì cho tới khi khởi động lại. Muốn biết Harness đang chạy bản nào: xem dòng `Plugin:` ở cuối báo cáo `jev_run` gần nhất, hoặc `node who.mjs` (cột `(plugin x.y.z)`); bản trên đĩa thì xem `package.json` trong thư mục plugin.
+**Lưu ý:** bản đang chạy trong Harness là bản đã nạp vào bộ nhớ; chép bản mới vào profile chưa đổi gì cho tới khi khởi động lại. Muốn biết Harness đang chạy bản nào: xem dòng `Plugin:` ở cuối báo cáo `david_run` gần nhất, hoặc `node who.mjs` (cột `(plugin x.y.z)`); bản trên đĩa thì xem `package.json` trong thư mục plugin.
 
 ### 11.8 Tầng backup miễn phí (OpenCode, OpenRouter)
 
@@ -453,7 +453,7 @@ Hai lớp cùng làm một việc, nên cần cả hai:
 
 **Đổi tên combo** (`full` → `main`): sửa ở dashboard 9Router (giữ nguyên `id` nội bộ) **và** một dòng `- id: main` trong danh sách model của `router9` ở `cordis.patch.yml`. Trước khi đổi, tìm mọi chỗ gọi tên cũ (patch, plugin, model mặc định, khoá API, công cụ bên ngoài).
 
-**Giới hạn tải Cursor (plugin 0.5.0).** Cursor từng rate-limit vì số worker song song không có trần. Hiện: tối đa **3** child cùng lúc trên Cursor (`cursor-workers` và `manager-temp` dùng chung trần), cách nhau tối thiểu **2 s** giữa hai lần khởi động, áp dụng cho **mọi** lần gọi `jev_run` cùng lúc; child dư thì xếp hàng, không bị từ chối. Một lần gọi có quá 6 sub-task hoặc quá 3 câu hỏi research bị từ chối trước khi chạy. Chỉnh trong `config:` của entry: `limits.concurrency`, `limits.startGapMs`, `limits.maxTasks`, `limits.maxResearch`. Báo cáo ghi `(queued 4.2s)` cho child phải chờ.
+**Giới hạn tải Cursor (plugin 0.5.0).** Cursor từng rate-limit vì số worker song song không có trần. Hiện: tối đa **3** child cùng lúc trên Cursor (`cursor-workers` và `manager-temp` dùng chung trần), cách nhau tối thiểu **2 s** giữa hai lần khởi động, áp dụng cho **mọi** lần gọi `david_run` cùng lúc; child dư thì xếp hàng, không bị từ chối. Một lần gọi có quá 6 sub-task hoặc quá 3 câu hỏi research bị từ chối trước khi chạy. Chỉnh trong `config:` của entry: `limits.concurrency`, `limits.startGapMs`, `limits.maxTasks`, `limits.maxResearch`. Báo cáo ghi `(queued 4.2s)` cho child phải chờ.
 
 **Cách đọc trang Usage của 9Router** (`/dashboard/usage`) và nguyên nhân thật của "Retry delay" (đo 2026-10-07, thay cho phần ghi sai trước đó):
 
@@ -479,4 +479,4 @@ Hai lớp cùng làm một việc, nên cần cả hai:
 
 **Việc phải làm ở 9Router (người dùng làm trong dashboard).** Đưa mọi model `cu/*` xuống **cuối** các combo `manager-temp` và `main`. Chừng nào chúng còn đứng đầu, agent đầu của Harness vẫn nhận trả lời rỗng.
 
-**Dùng hạn mức Cursor đã mua: hàng đợi tệp.** Đặt `chains: { worker: [cursorqueue, backup] }`. Plugin ghi task vào `~/.dsh/cursor-queue/pending/`; người dùng nói với app Cursor: *"Xử lý hàng đợi Jev trong `~/.dsh/cursor-queue`: đọc README.md và làm theo."* App chuyển task sang `claimed/`, sửa file trong `cwd`, ghi `done/<id>.md`; plugin chạy test và review như thường. Task không ai nhận trong `cursorQueue.waitMs` (5 phút) bị rút lại (`expired/`) và route backup làm việc đó, nên không bao giờ chờ người vô hạn và không làm hai lần. Giao thức đầy đủ nằm trong `README.md` của thư mục hàng đợi (plugin tự ghi).
+**Dùng hạn mức Cursor đã mua: hàng đợi tệp.** Đặt `chains: { worker: [cursorqueue, backup] }`. Plugin ghi task vào `~/.dsh/cursor-queue/pending/`; người dùng nói với app Cursor: *"Xử lý hàng đợi david trong `~/.dsh/cursor-queue`: đọc README.md và làm theo."* App chuyển task sang `claimed/`, sửa file trong `cwd`, ghi `done/<id>.md`; plugin chạy test và review như thường. Task không ai nhận trong `cursorQueue.waitMs` (5 phút) bị rút lại (`expired/`) và route backup làm việc đó, nên không bao giờ chờ người vô hạn và không làm hai lần. Giao thức đầy đủ nằm trong `README.md` của thư mục hàng đợi (plugin tự ghi).

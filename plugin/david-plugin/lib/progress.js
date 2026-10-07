@@ -1,7 +1,7 @@
 // What the child is actually doing, while it is doing it.
 //
 // Why this exists: the Harness publishes only `subagent/start` and `subagent/end` for a child
-// (lib/lifecycle.js in @deepseek-ai/dsh-subagent), so jev_run could write a step line when a worker
+// (lib/lifecycle.js in @deepseek-ai/dsh-subagent), so david_run could write a step line when a worker
 // started and another when it finished — and nothing in between. On 2026-10-07 the owner watched a
 // card say "đang chạy · 224s…" over a step feed that had been silent for four minutes and asked,
 // correctly, why a run that says it is running returns no log. It was not broken: a child's whole

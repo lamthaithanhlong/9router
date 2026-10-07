@@ -10,25 +10,25 @@ assert.ok(!reqs.some((r) => r.scriptError), `script error: ${JSON.stringify(reqs
 const withTools = reqs.filter((r) => r.nTools > 0);
 const toolsOf = (model) => withTools.filter((r) => r.model === model).map((r) => new Set(r.toolNames));
 const ran = (model) => reqs.some((r) => r.model === model);
-const SPAWNERS = ["jev_run", "subagent", "subagent_fork", "workflow"];
+const SPAWNERS = ["david_run", "subagent", "subagent_fork", "workflow"];
 const noSpawners = (model) => { for (const set of toolsOf(model)) for (const t of SPAWNERS) assert.ok(!set.has(t), `${model} was offered ${t}`); };
 const readOnly = (model) => { for (const set of toolsOf(model)) for (const t of ["write", "edit"]) assert.ok(!set.has(t), `${model} (reviewer) was offered ${t}`); };
-const ledger = () => JSON.parse(readFileSync(`${dir}/jev-ledger.json`, "utf8")).used;
+const ledger = () => JSON.parse(readFileSync(`${dir}/david-ledger.json`, "utf8")).used;
 
-assert.ok(withTools.some((r) => r.toolNames.includes("jev_run")), "jev_run was never offered to the head agent: plugin not loaded");
+assert.ok(withTools.some((r) => r.toolNames.includes("david_run")), "david_run was never offered to the head agent: plugin not loaded");
 assert.ok(out.includes(`Plugin: david plugin ${VERSION}`), `report has no "Plugin: david plugin ${VERSION}" footer`);
 noSpawners("cursor-workers");
 noSpawners("backup-free");
 
 if (scen === "A") {
-  assert.match(out, /jev_run: done/);
+  assert.match(out, /david_run: done/);
   assert.match(out, /worker-1 -> router9\/cursor-workers \[cursor\]/);
   assert.equal(readFileSync(`${dir}/repo/hello.txt`, "utf8"), "hi");
   assert.match(out, /not called: planner, researcher, reviewer, final_reviewer/);
   for (const m of ["deepseek-v4.1-flash", "codex-head", "backup-free"]) assert.ok(!ran(m), `${m} ran for a trivial change`);
-  assert.ok(!existsSync(`${dir}/jev-ledger.json`), "ledger written although only free routes ran");
+  assert.ok(!existsSync(`${dir}/david-ledger.json`), "ledger written although only free routes ran");
 } else if (scen === "B") {
-  assert.match(out, /jev_run: done/);
+  assert.match(out, /david_run: done/);
   assert.ok(existsSync(`${dir}/repo/src/auth/login.js`));
   assert.match(out, /reviewer -> deepseek-host\/deepseek-v4\.1-flash \[deepseek\]/);
   assert.match(out, /final-reviewer -> router9\/codex-head \[codex\]/);
@@ -39,7 +39,7 @@ if (scen === "A") {
   assert.ok(l.deepseek > 0 && l.codex === 1, `ledger wrong: ${JSON.stringify(l)}`);
 } else if (scen === "E") {
   // five sub-tasks, cap of 3 on Cursor: all five finish, never more than 3 requests in flight, and it is still parallel
-  assert.match(out, /jev_run: done/);
+  assert.match(out, /david_run: done/);
   for (const f of ["f1", "f2", "f3", "f4", "f5"]) assert.equal(readFileSync(`${dir}/repo/${f}.txt`, "utf8"), "hi", `${f}.txt missing: a queued worker never ran`);
   assert.match(out, /worker-5 -> router9\/cursor-workers \[cursor\]/);
   const peak = Math.max(...reqs.filter((r) => r.model === "cursor-workers").map((r) => r.inflight));
@@ -49,14 +49,14 @@ if (scen === "A") {
 } else if (scen === "F") {
   // The filter names "bogus_tool_name", so the real Harness refuses it exactly as the desktop profile refused
   // "subagent". The worker must still start, finish, and the report must say the filter got weaker.
-  assert.match(out, /jev_run: done/);
+  assert.match(out, /david_run: done/);
   assert.equal(readFileSync(`${dir}/repo/hello.txt`, "utf8"), "hi");
   assert.ok(!/FAILED/.test(out), "a route failed instead of retrying without the refused name");
   assert.match(out, /worker-1 -> router9\/cursor-workers \[cursor\]/);
   assert.match(out, /child tool filter: this Harness does not let a filter name "bogus_tool_name"/);
 } else if (scen === "C") {
   // Cursor answers HTTP 403 "quota exceeded": the worker must move to the backup route and finish.
-  assert.match(out, /jev_run: done/);
+  assert.match(out, /david_run: done/);
   assert.match(out, /worker-1 -> router9\/cursor-workers \[cursor, FAILED\]/);
   assert.match(out, /worker-1 -> router9\/backup-free \[backup, fallback\]/);
   assert.match(out, /worker ran on the BACKUP route \(router9\/backup-free\)/);
@@ -65,7 +65,7 @@ if (scen === "A") {
 } else if (scen === "D") {
   // DeepSeek and Codex both answer 403: the reviewers run on the backup route. A risky diff approved only by
   // backup reviewers must stop for a person.
-  assert.match(out, /jev_run: awaiting_human/);
+  assert.match(out, /david_run: awaiting_human/);
   assert.match(out, /reviewer -> deepseek-host\/deepseek-v4\.1-flash \[deepseek, FAILED\]/);
   assert.match(out, /reviewer -> router9\/codex-head \[codex, fallback, FAILED\]/);
   assert.match(out, /reviewer -> router9\/backup-free \[backup, fallback\]/);

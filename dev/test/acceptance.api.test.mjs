@@ -30,7 +30,7 @@ function route(over = {}) {
     model: "route-model",
     api: {
       baseUrl: "https://upstream.example/v1",
-      keyEnv: "JEV_ACCEPTANCE_KEY",
+      keyEnv: "DAVID_ACCEPTANCE_KEY",
       model: "api-model",
       headers: { "x-tenant": "acme" },
       ...over,
@@ -53,7 +53,7 @@ test("api.js exists and exports createApiSpawn", async () => {
 });
 
 test("happy path: request shape, text and usage are mapped", async () => {
-  process.env.JEV_ACCEPTANCE_KEY = "sekret-value";
+  process.env.DAVID_ACCEPTANCE_KEY = "sekret-value";
   const seen = [];
   const fetchImpl = async (url, init) => {
     seen.push({ url, init });
@@ -80,7 +80,7 @@ test("happy path: request shape, text and usage are mapped", async () => {
 });
 
 test("path is overridable and content may be an array of text parts", async () => {
-  process.env.JEV_ACCEPTANCE_KEY = "k";
+  process.env.DAVID_ACCEPTANCE_KEY = "k";
   let calledUrl = "";
   const fetchImpl = async (url) => {
     calledUrl = url;
@@ -96,7 +96,7 @@ test("path is overridable and content may be an array of text parts", async () =
 });
 
 test("usage absent is not an error: both token counts are 0", async () => {
-  process.env.JEV_ACCEPTANCE_KEY = "k";
+  process.env.DAVID_ACCEPTANCE_KEY = "k";
   const { createApiSpawn } = await loadApi();
   const spawn = createApiSpawn(resolveConfig(), { fetchImpl: async () => jsonResponse({ choices: [{ message: { content: "hi" } }] }) });
   const out = await spawn(route(), "p", "l", "role");
@@ -104,17 +104,17 @@ test("usage absent is not an error: both token counts are 0", async () => {
 });
 
 test("missing env var names the env var and keeps the pipeline fallback possible", async () => {
-  delete process.env.JEV_ACCEPTANCE_KEY;
+  delete process.env.DAVID_ACCEPTANCE_KEY;
   const { createApiSpawn } = await loadApi();
   const spawn = createApiSpawn(resolveConfig(), { fetchImpl: async () => jsonResponse({}) });
   await assert.rejects(() => spawn(route(), "p", "l", "role"), (err) => {
-    assert.match(String(err.message), /api route api_test needs env JEV_ACCEPTANCE_KEY/);
+    assert.match(String(err.message), /api route api_test needs env DAVID_ACCEPTANCE_KEY/);
     return true;
   });
 });
 
 test("HTTP failure reports status + body, never a key or an Authorization header", async () => {
-  process.env.JEV_ACCEPTANCE_KEY = "sekret-value";
+  process.env.DAVID_ACCEPTANCE_KEY = "sekret-value";
   const { createApiSpawn } = await loadApi();
   const spawn = createApiSpawn(resolveConfig(), {
     fetchImpl: async () => ({ ok: false, status: 500, async text() { return "upstream exploded"; }, async json() { return {}; } }),
@@ -130,7 +130,7 @@ test("HTTP failure reports status + body, never a key or an Authorization header
 });
 
 test("empty content is an error (an empty 200 is not a success)", async () => {
-  process.env.JEV_ACCEPTANCE_KEY = "k";
+  process.env.DAVID_ACCEPTANCE_KEY = "k";
   const { createApiSpawn } = await loadApi();
   const spawn = createApiSpawn(resolveConfig(), { fetchImpl: async () => jsonResponse({ choices: [{ message: { content: "   " } }] }) });
   await assert.rejects(() => spawn(route(), "p", "l", "role"));
@@ -163,7 +163,7 @@ test("api.enabled true: api routes sit directly before backup in the four text-o
 test("pipeline charges the real token numbers when spawn returns them", async () => {
   const trace = [];
   // The pipeline really uses the Ledger (canSpend/charge), so a stub is not enough.
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-acc-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-acc-")), "l.json"), DEFAULTS.budgets);
   const deps = {
     cfg: resolveConfig({ laya: { reviewEnabled: true } }),
     ledger,

@@ -1,6 +1,6 @@
 import "./_sandbox.mjs";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -40,10 +40,10 @@ test("module contract: name, inject, apply", () => {
   assert.equal(typeof apply, "function");
 });
 
-test("apply: registers jev_run, jev_watch and jev_probe when the spawn provider is present", () => {
+test("apply: registers david_run, david_watch and david_probe when the spawn provider is present", () => {
   const f = fakeCtx();
   apply(f.ctx, {});
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch", "jev_probe"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["david_run", "david_watch", "david_probe"]);
 });
 
 test("apply: waits for the provider, mounts when it appears, unmounts when it goes", () => {
@@ -53,28 +53,28 @@ test("apply: waits for the provider, mounts when it appears, unmounts when it go
   f.handlers.get("subagent/provider-added")({ name: "fork" });
   assert.equal(f.registered.length, 0); // some other provider
   f.handlers.get("subagent/provider-added")({ name: "spawn" });
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch", "jev_probe"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["david_run", "david_watch", "david_probe"]);
   f.handlers.get("subagent/provider-added")({ name: "spawn" });
   assert.equal(f.registered.length, 3); // not mounted twice
   f.handlers.get("subagent/provider-removed")("spawn");
   assert.equal(f.registered.length, 0);
 });
 
-test("apply: jev_watch is absent when cost.enabled is false; jev_probe does not depend on cost", () => {
+test("apply: david_watch is absent when cost.enabled is false; david_probe does not depend on cost", () => {
   const f = fakeCtx();
   apply(f.ctx, { cost: { enabled: false } });
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_probe"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["david_run", "david_probe"]);
 });
 
-test("apply: jev_probe is absent when probe.enabled is false, jev_watch still mounts", () => {
+test("apply: david_probe is absent when probe.enabled is false, david_watch still mounts", () => {
   const f = fakeCtx();
   apply(f.ctx, { probe: { enabled: false } });
-  assert.deepEqual(f.registered.map((t) => t.name), ["jev_run", "jev_watch"]);
+  assert.deepEqual(f.registered.map((t) => t.name), ["david_run", "david_watch"]);
 });
 
 test("tool definition: schema shape the Harness expects", () => {
   const cfg = resolveConfig();
-  const tool = buildTool(fakeCtx().ctx, cfg, new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), cfg.budgets));
+  const tool = buildTool(fakeCtx().ctx, cfg, new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), cfg.budgets));
   assert.equal(tool.parameters.type, "object");
   assert.deepEqual(tool.parameters.required, ["task", "cwd"]);
   assert.ok(!("model" in tool.parameters.properties) && !("provider" in tool.parameters.properties));
@@ -85,7 +85,7 @@ test("tool definition: schema shape the Harness expects", () => {
 
 function runTool(f, args, cfgOver = {}) {
   const cfg = resolveConfig({ laya: { enabled: false }, ledgerFile: "unused", ...cfgOver });
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), cfg.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), cfg.budgets);
   const tool = buildTool(f.ctx, cfg, ledger);
   const exec = { agent: { id: "head" }, signal: new AbortController().signal };
   return tool.execute(args, exec);
@@ -124,7 +124,7 @@ test("execute: a failing primary worker route is followed by the backup route, w
 test("execute: a route that fails its probe is skipped before any child is started on it", async () => {
   const f = fakeCtx();
   const cfg = resolveConfig({ laya: { enabled: false }, ledgerFile: "unused" });
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), cfg.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), cfg.budgets);
   const asked = [];
   const probe = {
     probedRouteKeys: () => ["cursor"],
@@ -145,6 +145,17 @@ test("execute: a route that fails its probe is skipped before any child is start
 test("execute: refuses to run without a calling agent", async () => {
   const f = fakeCtx();
   const cfg = resolveConfig();
-  const tool = buildTool(f.ctx, cfg, new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), cfg.budgets));
+  const tool = buildTool(f.ctx, cfg, new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), cfg.budgets));
   await assert.rejects(tool.execute({ task: "t", cwd: "/x" }, { signal: new AbortController().signal }), /requires a calling agent/);
+});
+
+test("apply: history in the old jev-* files is copied to david-* when the plugin starts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "david-"));
+  writeFileSync(join(dir, "jev-runs.jsonl"), '{"old":1}\n');
+  writeFileSync(join(dir, "jev-ledger.json"), '{"day":"d","used":{}}');
+  const f = fakeCtx();
+  apply(f.ctx, { runLog: join(dir, "david-runs.jsonl"), ledgerFile: join(dir, "david-ledger.json"), stepsFile: join(dir, "david-steps.jsonl"), dashboard: { enabled: false } });
+  assert.equal(readFileSync(join(dir, "david-runs.jsonl"), "utf8"), '{"old":1}\n');
+  assert.equal(readFileSync(join(dir, "david-ledger.json"), "utf8"), '{"day":"d","used":{}}');
+  assert.ok(existsSync(join(dir, "jev-runs.jsonl")), "the original stays");
 });

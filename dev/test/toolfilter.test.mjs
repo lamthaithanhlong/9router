@@ -10,8 +10,8 @@ import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
 import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 import { ToolFilter, refusedNames } from "../../plugin/david-plugin/lib/toolfilter.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
-// verbatim from ~/.dsh/jev-runs.jsonl on the desktop profile (list shortened)
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
+// verbatim from ~/.dsh/david-runs.jsonl on the desktop profile (list shortened)
 const REAL = 'tools.restrict() names unknown global tool "subagent"; known global tools: ask_user_question, bash, create_goal, edit, exit_plan_mode';
 
 test("refusedNames reads the names from the Harness's own message", () => {
@@ -28,9 +28,9 @@ test("ToolFilter only drops names it actually sent, and remembers them", () => {
   assert.deepEqual(f.deny("worker"), DEFAULTS.childTools.denyAll);
   assert.deepEqual(f.learn(new Error('tools.restrict() names unknown global tool "not_ours"; known global tools: x'), f.deny("worker")), [], "a name we never sent is not ours to drop");
   assert.deepEqual(f.learn(new Error(REAL), f.deny("worker")), ["subagent"]);
-  assert.ok(!f.deny("worker").includes("subagent") && f.deny("worker").includes("jev_run"));
+  assert.ok(!f.deny("worker").includes("subagent") && f.deny("worker").includes("david_run"));
   assert.deepEqual(f.learn(new Error(REAL), f.deny("worker")), [], "this attempt no longer sends it: nothing to learn, so the caller must rethrow");
-  const stale = ["jev_run", "subagent"]; // a sibling's attempt that started before the name was learned
+  const stale = ["david_run", "subagent"]; // a sibling's attempt that started before the name was learned
   assert.deepEqual(f.learn(new Error(REAL), stale), ["subagent"], "a stale attempt must still be told to retry");
   assert.ok(!f.deny("reviewer").includes("subagent"), "learned for every role");
   assert.ok(f.deny("reviewer").includes("write"));
@@ -64,14 +64,14 @@ test("a refused filter name no longer kills the child: it is dropped and the chi
   const out = await run(toolFor(ctx));
   assert.equal(ctx.starts.length, 2, "first start refused, second start accepted");
   assert.ok(ctx.starts[0].includes("subagent") && !ctx.starts[1].includes("subagent"));
-  assert.ok(ctx.starts[1].includes("jev_run"), "the guard on names the Harness accepts must stay");
+  assert.ok(ctx.starts[1].includes("david_run"), "the guard on names the Harness accepts must stay");
   assert.ok(!/every route failed/.test(out), "the worker must not be reported as dead");
 });
 
 test("every name the Harness refuses is dropped, including several at once", async () => {
   const ctx = fakeCtx({ refuse: ["subagent", "subagent_fork", "workflow"] });
   await run(toolFor(ctx));
-  assert.deepEqual(ctx.starts.at(-1), ["jev_run"]);
+  assert.deepEqual(ctx.starts.at(-1), ["david_run"]);
 });
 
 test("the refusal is learned once per tool: later children start straight away", async () => {
@@ -109,7 +109,7 @@ function realRepo() {
 test("the report says the filter got weaker, exactly once even with several children", async () => {
   const ctx = fakeCtx({ refuse: ["subagent"] });
   const out = await toolFor(ctx).execute({ task: "t", cwd: realRepo(), tasks: ["a", "b", "c"], plan: "no" }, exec());
-  assert.match(out, /^jev_run: done/);
+  assert.match(out, /^david_run: done/);
   const notes = out.match(/child tool filter: this Harness does not let a filter name "subagent"/g) ?? [];
   assert.equal(notes.length, 1, `expected one note, got ${notes.length}:\n${out}`);
   assert.match(out, /the depth limit still stops them from delegating/);
@@ -121,14 +121,14 @@ test("no note when the Harness accepts the whole filter", async () => {
 });
 
 test("denyFor is still exported and unchanged for callers", () => {
-  assert.deepEqual(denyFor(DEFAULTS, "worker"), ["jev_run", "subagent", "subagent_fork", "workflow"]);
+  assert.deepEqual(denyFor(DEFAULTS, "worker"), ["david_run", "subagent", "subagent_fork", "workflow"]);
   assert.ok(denyFor(DEFAULTS, "reviewer").includes("write"));
 });
 
 test("workers that start together are all rescued: none falls back to the backup route (race: the filter is learned while a sibling is already refused)", async () => {
   const ctx = fakeCtx({ refuse: ["subagent"] });
   const out = await toolFor(ctx).execute({ task: "t", cwd: realRepo(), tasks: ["a", "b", "c"], plan: "no" }, exec());
-  assert.match(out, /^jev_run: done/);
+  assert.match(out, /^david_run: done/);
   assert.ok(!/FAILED/.test(out), `a sibling worker died instead of retrying:\n${out}`);
   assert.ok(!/backup/.test(out.split("Notes:")[0]), "no worker should have needed the backup route");
   assert.match(out, /worker-3 -> router9\/cursor-workers \[cursor\]/);

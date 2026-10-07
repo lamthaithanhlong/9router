@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createCostTracker, matchUsage } from "../../plugin/david-plugin/lib/cost.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-cost-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-cost-"));
 
 // Build a small, real 9Router-like database: one usageHistory row per call and one usageDaily
 // row per UTC day. 9Router's table names are the public contract we read.

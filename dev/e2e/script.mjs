@@ -42,7 +42,7 @@ export default function decide({ j, msgs, last, text }) {
       : risky
       ? { task: "add src/auth/login.js", cwd: repo, plan: "no", test_command: "test -f src/auth/login.js", allowed_paths: ["src/**"] }
       : { task: "create hello.txt containing hi", cwd: repo, plan: "no", test_command: "test -f hello.txt" };
-    if (!hasToolResult) return { tool_calls: [{ name: "jev_run", args }] };
+    if (!hasToolResult) return { tool_calls: [{ name: "david_run", args }] };
     return { content: `HEAD FINAL REPORT:\n${text(last)}` };
   }
   // deepseek-v4.1-flash, codex-head: the paid reviewers

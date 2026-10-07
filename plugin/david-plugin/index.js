@@ -1,4 +1,4 @@
-// david-plugin: one tool, `jev_run`, that runs a coding task through
+// david-plugin: one tool, `david_run`, that runs a coding task through
 // cost-aware roles. Cursor workers do the work; Codex plans and researches;
 // DeepSeek reviews only the diffs that need it; Laya (local, free) answers the
 // yes/no questions. See README.md and ../../PLUGIN-TEMPLATE.md.
@@ -24,6 +24,7 @@ import { createDashboard } from "./lib/dashboard.js";
 import { recordRun } from "./lib/runlog.js";
 import { createQueue, idSource } from "./lib/queue.js";
 import { cfoLine } from "./lib/telemetry.js";
+import { migrateLegacyFiles } from "./lib/legacy.js";
 
 // package.json is the single source of truth for the version.
 function readVersion() {
@@ -144,8 +145,8 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
       if (!exec.agent) throw new Error(`${cfg.toolName} requires a calling agent (exec.agent was undefined)`);
       const tasks = strings(args.tasks);
       const research = strings(args.research);
-      if (tasks.length > cfg.limits.maxTasks) throw new Error(`jev_run refused: ${tasks.length} sub-tasks is more than the limit of ${cfg.limits.maxTasks}; split the work into separate calls`);
-      if (research.length > cfg.limits.maxResearch) throw new Error(`jev_run refused: ${research.length} research questions is more than the limit of ${cfg.limits.maxResearch}`);
+      if (tasks.length > cfg.limits.maxTasks) throw new Error(`david_run refused: ${tasks.length} sub-tasks is more than the limit of ${cfg.limits.maxTasks}; split the work into separate calls`);
+      if (research.length > cfg.limits.maxResearch) throw new Error(`david_run refused: ${research.length} research questions is more than the limit of ${cfg.limits.maxResearch}`);
       const input = {
         task: args.task,
         cwd: args.cwd,
@@ -158,7 +159,7 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
       };
       let last;
       const trace = [];
-      const stamp = Date.now().toString(36); // run id: one per jev_run; shared by every step line and every task id
+      const stamp = Date.now().toString(36); // run id: one per david_run; shared by every step line and every task id
       const nextTaskId = idSource(stamp);
       // Cost tracker + step writer are fresh per run so the per-task accumulator starts at zero.
       const cost = cfg.cost?.enabled !== false
@@ -170,7 +171,7 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
         trace,
         health,
         limiter,
-        rotation, // the manager seat's turn counter, shared by every jev_run in this process
+        rotation, // the manager seat's turn counter, shared by every david_run in this process
         aborted: () => exec.signal?.aborted === true,
         cfg,
         ledger,
@@ -242,13 +243,13 @@ export function buildTool(ctx, cfg, ledger, log = () => {}, health = new RouteHe
   };
 }
 
-// `jev_watch` — a read-only companion tool that tells the owner what a run is up to
+// `david_watch` — a read-only companion tool that tells the owner what a run is up to
 // without spending a model call: the step feed is already on disk, and 9Router's
 // SQLite log is read-only. Registered only when cost tracking is enabled.
 export function buildWatchTool(ctx, cfg, ledger, log = () => {}, cost) {
   const stepsFile = expandHome(cfg.stepsFile);
   return {
-    name: "jev_watch",
+    name: "david_watch",
     description:
       "Free progress view: the last lines from the step feed, today's spend via 9Router, the last 10 upstream calls, " +
       "and the current ledger. Performs no model call and no subagent call — reads files and the read-only SQLite handle only.",
@@ -264,7 +265,7 @@ export function buildWatchTool(ctx, cfg, ledger, log = () => {}, cost) {
     },
     timeoutMs: 30_000,
     async execute(args, exec) {
-      if (!exec.agent) throw new Error("jev_watch requires a calling agent (exec.agent was undefined)");
+      if (!exec.agent) throw new Error("david_watch requires a calling agent (exec.agent was undefined)");
       const limit = Number.isFinite(args.lines) ? Math.max(1, Math.min(500, args.lines)) : 30;
       const stamp = (t) => new Date(t).toISOString().slice(11, 19);
       const out = [];
@@ -323,12 +324,12 @@ export function buildWatchTool(ctx, cfg, ledger, log = () => {}, cost) {
 function sinceFileName(p) { return p.split("/").slice(-1)[0]; }
 function escape(s) { return String(s).replace(/[\r\n]/g, " "); }
 
-// `jev_probe` — the single call that answers "is that route actually returning anything?".
+// `david_probe` — the single call that answers "is that route actually returning anything?".
 // It asks every route marked `probe: true` and prints a table. It shares the cached probe with
-// the pipeline, so running jev_probe just before a jev_run makes that run's own probes free.
+// the pipeline, so running david_probe just before a david_run makes that run's own probes free.
 export function buildProbeTool(ctx, cfg, log = () => {}, probe) {
   return {
-    name: "jev_probe",
+    name: "david_probe",
     description:
       "Ask every route that can go silent whether it really answers. One small upstream call per probed route " +
       "(cursor only: codex, deepseek and backup answer when they answer, and probing them would spend " +
@@ -363,22 +364,23 @@ export function apply(ctx, userConfig) {
   const cfg = resolveConfig(userConfig ?? {});
   const ledger = new Ledger(expandHome(cfg.ledgerFile), cfg.budgets);
   const log = (msg) => ctx.logger.info(`[${NAME}] ${msg}`);
-  const health = new RouteHealth(cfg.limits.routeCooldownMs); // shared by every jev_run in this process
+  migrateLegacyFiles([expandHome(cfg.ledgerFile), expandHome(cfg.runLog), expandHome(cfg.stepsFile)], log);
+  const health = new RouteHealth(cfg.limits.routeCooldownMs); // shared by every david_run in this process
   const limiter = newLimiter(cfg); // likewise: the Cursor cap holds across simultaneous runs
   const filter = new ToolFilter(cfg); // what this Harness refused to let a child filter name, learned once
   const queue = newQueue(cfg);
   // The manager seat's turn counter. One per process, like health and the limiter, so turns keep
-  // alternating across every jev_run in this Harness instead of restarting at zero on each call.
+  // alternating across every david_run in this Harness instead of restarting at zero on each call.
   const rotation = new Map();
-  // jev_watch is the read-only companion tool: it only reads the steps file, 9Router SQLite, and the ledger.
+  // david_watch is the read-only companion tool: it only reads the steps file, 9Router SQLite, and the ledger.
   // The cost tracker is also cheap (a single read-only DB handle), so we create it once per process.
   const watchCost = cfg.cost?.enabled !== false ? createCostTracker({ ...cfg, cost: { ...cfg.cost, dbFile: expandHome(cfg.cost.dbFile) } }, { log }) : null;
-  // One probe cache per process, shared by every jev_run and by jev_probe, so a route is asked
+  // One probe cache per process, shared by every david_run and by david_probe, so a route is asked
   // once per ttlMs rather than once per child.
   const probe = cfg.probe?.enabled !== false ? createProbe({ ...cfg, probe: { ...cfg.probe, dataDir: expandHome(cfg.probe?.dataDir ?? "~/.9router") } }, { log }) : null;
   // The live dashboard, started once per process next to the other shared state. Read-only and free
   // (it tails files and the ledger); a busy port moves it to the next one and a failure to listen
-  // only logs a line. jev_run prints the URL in every report.
+  // only logs a line. david_run prints the URL in every report.
   const dash = cfg.dashboard?.enabled === false ? null : createDashboard({
     cfg, ledger, version, log,
     port: cfg.dashboard?.port ?? 8787,
@@ -391,7 +393,7 @@ export function apply(ctx, userConfig) {
     disposers.push(ctx.tools.register(buildTool(ctx, cfg, ledger, log, health, limiter, filter, queue, probe, rotation, () => dash?.url() ?? null)));
     if (watchCost) disposers.push(ctx.tools.register(buildWatchTool(ctx, cfg, ledger, log, watchCost)));
     if (probe) disposers.push(ctx.tools.register(buildProbeTool(ctx, cfg, log, probe)));
-    log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ jev_watch)" : ""}${probe ? " (+ jev_probe)" : ""}`);
+    log(`tool "${cfg.toolName}" registered (v${version})${watchCost ? " (+ david_watch)" : ""}${probe ? " (+ david_probe)" : ""}`);
   };
 
   // The tool needs the subagent provider; mount it whenever that appears.

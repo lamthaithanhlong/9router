@@ -1,14 +1,14 @@
-// Read-only view of the four free sources that jev_watch and the live HTML dashboard
+// Read-only view of the four free sources that david_watch and the live HTML dashboard
 // show. Every function degrades to zero / empty on missing, unreadable or half-written
 // inputs and never throws, so a broken log can never break the run that is reading it.
 //
-//   1. ~/.dsh/jev-steps.jsonl    one line per pipeline transition
-//   2. ~/.dsh/jev-runs.jsonl     one line per finished run
-//   3. ~/.dsh/jev-ledger.json    today's per-route spend
+//   1. ~/.dsh/david-steps.jsonl    one line per pipeline transition
+//   2. ~/.dsh/david-runs.jsonl     one line per finished run
+//   3. ~/.dsh/david-ledger.json    today's per-route spend
 //   4. ~/.9router/db/data.sqlite 9Router's read-only usageHistory + usageDaily
 //
 // All paths follow the same conventions as lib/cost.js, lib/steps.js and watch.mjs:
-// env vars DSH_HOME, JEV_9ROUTER_DB override the defaults; "~/" is expanded.
+// env vars DSH_HOME, DAVID_9ROUTER_DB override the defaults; "~/" is expanded.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -23,10 +23,10 @@ function expandHome(p) {
 
 const HOME = process.env.HOME || homedir();
 const DSH = process.env.DSH_HOME || join(HOME, ".dsh");
-export const LEDGER_FILE = process.env.JEV_LEDGER_FILE || join(DSH, "jev-ledger.json");
-export const RUNS_FILE = process.env.JEV_RUNS_FILE || join(DSH, "jev-runs.jsonl");
-export const STEPS_FILE = process.env.JEV_STEPS_FILE || join(DSH, "jev-steps.jsonl");
-export const NINE_DB = process.env.JEV_9ROUTER_DB || join(HOME, ".9router", "db", "data.sqlite");
+export const LEDGER_FILE = process.env.DAVID_LEDGER_FILE || join(DSH, "david-ledger.json");
+export const RUNS_FILE = process.env.DAVID_RUNS_FILE || join(DSH, "david-runs.jsonl");
+export const STEPS_FILE = process.env.DAVID_STEPS_FILE || join(DSH, "david-steps.jsonl");
+export const NINE_DB = process.env.DAVID_9ROUTER_DB || join(HOME, ".9router", "db", "data.sqlite");
 
 const fileSize = (p) => { try { return statSync(p).size; } catch { return 0; } };
 const safeRead = (p) => { try { return readFileSync(p, "utf8"); } catch { return ""; } };
@@ -354,10 +354,10 @@ export async function snapshotAsync(cfg, ledger) {
 }
 
 // ---------------------------------------------------------------------------
-// CFO line for jev_watch
+// CFO line for david_watch
 // ---------------------------------------------------------------------------
 
-// Build the CFO block jev_watch prints near the top. Disabled tracking ->
+// Build the CFO block david_watch prints near the top. Disabled tracking ->
 // "CFO: (cost tracking off)". Same budget/ledger join as snapshot() so the
 // dashboard and the CLI agree on the wallet state. "this task" is the USD the
 // CURRENT run is accumulating, not a cumulative total across the day: read it

@@ -13,6 +13,26 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-07
+
+### Changed (breaking)
+- **Everything called "jev" is now "david", except Jev AI** (the hosted API, its model names, its key file and the
+  local Laya engine behind it, and the "Jev · gate" node that shows its answer). So the tools are
+  `david_run` / `david_probe` / `david_watch` (were `jev_run` / `jev_probe` / `jev_watch`); the data files are
+  `~/.dsh/david-runs.jsonl`, `david-steps.jsonl`, `david-ledger.json`; the environment variables are
+  `DAVID_SKIP_LAUNCHCTL`, `DAVID_RUN_LOG`, `DAVID_RUNS_FILE`, `DAVID_STEPS_FILE`, `DAVID_LEDGER_FILE`,
+  `DAVID_9ROUTER_DB`, `DAVID_ACCEPTANCE_KEY`, `DAVID_API_TEST_KEY` (were `JEV_*`); backups made by the scripts are
+  `.bak-david-*`. Unchanged because they belong to Jev AI: model `jev-latest`, `~/.dsh/jev/typesafe.key`,
+  `~/.dsh/jev/laya-keepalive.sh`, the `com.jev.laya-keepalive` LaunchAgent, the `laya.*` config keys.
+- **Upgrading:** run `./install.sh` and restart the Harness. Then edit anything of yours that names the old tools:
+  `install.sh` rewrites `jev_run` / `jev_probe` / `jev_watch` inside the plugin's own block of `cordis.patch.yml`
+  (e.g. a `childTools` filter; backup `cordis.patch.yml.bak-tools-<time>`), but `~/.dsh/AGENTS.md` and any other file
+  that tells an agent to call `jev_run` are yours: until they say `david_run` the agent will call a tool that no
+  longer exists. A session that was open before the restart still has the old tools until it is reopened.
+- **History is kept:** the first start under 0.9.0 copies the old `jev-*` files to their `david-*` names when the new
+  one does not exist yet (`lib/legacy.js`; `watch.mjs` and `who.mjs` do the same on first use). The originals are left
+  in place and are no longer written.
+
 ## [0.8.0] - 2026-10-07
 
 ### Changed

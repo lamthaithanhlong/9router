@@ -13,7 +13,7 @@ const frame = (text) => zstdCompressSync(Buffer.from(text));
 const frames = (...texts) => Buffer.concat(texts.map(frame));
 const jsonl = (...objs) => objs.map((o) => `${JSON.stringify(o)}\n`).join("");
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-prog-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-prog-"));
 
 test("progress: frameStarts finds every appended frame", () => {
   const buf = frames('{"a":1}\n', '{"b":2}\n', '{"c":3}\n');

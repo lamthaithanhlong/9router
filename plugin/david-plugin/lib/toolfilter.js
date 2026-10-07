@@ -2,7 +2,7 @@
 //
 // Measured in the desktop profile (0.5.0 bug): the child's tool filter may only name "global" tools.
 // `subagent`, `subagent_fork` and `workflow` live on the child's own layer there, so naming them made
-// tools.restrict() throw, the child never started, and every jev_run died in 2-3 ms on every route:
+// tools.restrict() throw, the child never started, and every david_run died in 2-3 ms on every route:
 //   tools.restrict() names unknown global tool "subagent"; known global tools: ask_user_question, bash, ...
 // The headless profile used by dev/e2e registers them globally, which is why that check passed.
 

@@ -10,7 +10,7 @@ import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
 import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 import { runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
-const KEY_ENV = "JEV_API_TEST_KEY";
+const KEY_ENV = "DAVID_API_TEST_KEY";
 const KEY_VALUE = "test-key-value-0123456789";
 const DS = "deepseek-v4.1-flash";
 const APPROVE = '{"verdict":"approve","issues":[]}';
@@ -132,7 +132,7 @@ test("api.enabled false exposes no api route; true puts them right before backup
 });
 
 test("the ledger is charged the real tokens when the route reports them", async () => {
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-api-test-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-api-test-")), "l.json"), DEFAULTS.budgets);
   const trace = [];
   const deps = {
     cfg: resolveConfig({ laya: { reviewEnabled: true } }),

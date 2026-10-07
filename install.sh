@@ -7,7 +7,7 @@
 # Changes only: <profile>/plugins/david-plugin, one marked block appended to
 # <profile>/cordis.patch.yml (backed up first), $DSH_HOME/PLUGIN-TEMPLATE.md and,
 # with --keepalive, one LaunchAgent that keeps Laya running.
-# JEV_SKIP_LAUNCHCTL=1 writes the plist but leaves launchd alone (for tests).
+# DAVID_SKIP_LAUNCHCTL=1 writes the plist but leaves launchd alone (for tests).
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -73,11 +73,21 @@ else
     echo "$PATCH is an inline empty list; convert it to a block list first" >&2
     exit 1
   fi
-  BACKUP=$PATCH.bak-jev-$(date +%Y%m%d%H%M%S)
+  BACKUP=$PATCH.bak-david-$(date +%Y%m%d%H%M%S)
   cp "$PATCH" "$BACKUP"
   if [ -s "$PATCH" ] && [ -n "$(tail -c1 "$PATCH")" ]; then echo >> "$PATCH"; fi
   cat "$HERE/patch/david-plugin.patch.yml" >> "$PATCH"
   echo "patch entry appended to $PATCH (backup: $BACKUP)"
+fi
+
+# 2b. 0.9.0 renamed the tools (jev_run -> david_run, likewise jev_probe, jev_watch). The block may name them, e.g. in
+# the child tool filter, so they follow, inside the block only. (awk, not sed | grep -q: with pipefail grep's early
+# exit would make a match look like a failure.)
+if awk '/^# david-plugin:begin$/{b=1} b && /jev_(run|probe|watch)/{f=1} /^# david-plugin:end$/{b=0} END{exit !f}' "$PATCH"; then
+  BACKUP2=$PATCH.bak-tools-$(date +%Y%m%d%H%M%S)
+  cp "$PATCH" "$BACKUP2"
+  sed -E '/^# david-plugin:begin$/,/^# david-plugin:end$/ s/jev_(run|probe|watch)/david_\1/g' "$BACKUP2" > "$PATCH"
+  echo "tool names in the patch block renamed jev_* -> david_* (backup: $BACKUP2)"
 fi
 
 # 3. the plugin template, kept next to the Harness profiles
@@ -119,7 +129,7 @@ if [ "$KEEPALIVE" = 1 ]; then
   PLIST=$HOME/Library/LaunchAgents/com.jev.laya-keepalive.plist
   mkdir -p "$HOME/Library/LaunchAgents"
   sed "s|REPLACE_SCRIPT|$DSH_HOME/jev/laya-keepalive.sh|" "$HERE/scripts/com.jev.laya-keepalive.plist" > "$PLIST"
-  if [ -z "${JEV_SKIP_LAUNCHCTL:-}" ]; then
+  if [ -z "${DAVID_SKIP_LAUNCHCTL:-}" ]; then
     launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$PLIST"
   fi
@@ -127,4 +137,4 @@ if [ "$KEEPALIVE" = 1 ]; then
 fi
 
 echo
-echo "Done. Restart DeepSeek Harness, then confirm the tool jev_run is available."
+echo "Done. Restart DeepSeek Harness, then confirm the tool david_run is available."

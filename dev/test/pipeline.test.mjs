@@ -20,7 +20,7 @@ function harness(s = {}) {
   const prompts = [];
   const queues = new Map(Object.entries(s.replies ?? {}).map(([k, v]) => [k, [...v]]));
   const tests = [...(s.tests ?? [true])];
-  const ledger = s.ledger ?? new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
+  const ledger = s.ledger ?? new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), DEFAULTS.budgets);
   const laya = { noul: async (id) => (s.laya && id in s.laya ? s.laya[id] : null) };
   const deps = {
     cfg: s.cfg ?? DEFAULTS,
@@ -148,7 +148,7 @@ test("research goes to Codex and reaches the workers as a cut digest", async () 
 test("research: with Codex quota spent the manager seat sends the researcher to DeepSeek", async () => {
   // The office rotates: Codex is out of calls, so DeepSeek-host holds it for this call. The worker
   // chain in DEFAULTS is still [cursor, backup], so the task itself runs on Cursor.
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), DEFAULTS.budgets);
   for (let i = 0; i < 40; i++) ledger.charge("codex", 0);
   const h = harness({ ledger, laya: { needs_review: 0 } });
   await runPipeline(h.deps, input({ research: ["q"] }));
@@ -257,7 +257,7 @@ test("red twice then green: that alone triggers the paid review", async () => {
 });
 
 test("DeepSeek and Codex both spent: the review runs on the backup route, and a risky diff approved only by backup waits for a person", async () => {
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), DEFAULTS.budgets);
   ledger.charge("deepseek", 300_000);
   for (let i = 0; i < 40; i++) ledger.charge("codex", 0);
   const h = harness({ ledger, changes: RISKY, replies: { [BACKUP]: [APPROVE] } });
@@ -269,7 +269,7 @@ test("DeepSeek and Codex both spent: the review runs on the backup route, and a 
 });
 
 test("backupPolicy.reviewIsFinal accepts a backup-only approval", async () => {
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), DEFAULTS.budgets);
   ledger.charge("deepseek", 300_000);
   for (let i = 0; i < 40; i++) ledger.charge("codex", 0);
   const cfg = resolveConfig({ backupPolicy: { reviewIsFinal: true } });
@@ -278,7 +278,7 @@ test("backupPolicy.reviewIsFinal accepts a backup-only approval", async () => {
 });
 
 test("the backup reviewer can still reject: that always stops for a person", async () => {
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), DEFAULTS.budgets);
   ledger.charge("deepseek", 300_000);
   for (let i = 0; i < 40; i++) ledger.charge("codex", 0);
   const cfg = resolveConfig({ backupPolicy: { reviewIsFinal: true } });
@@ -286,7 +286,7 @@ test("the backup reviewer can still reject: that always stops for a person", asy
   assert.equal((await runPipeline(h.deps, input())).status, "awaiting_human");
 });
 test("Codex spent but DeepSeek fine: gate 3 runs on the backup route, and DeepSeek's approval still counts", async () => {
-  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "jev-")), "l.json"), DEFAULTS.budgets);
+  const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "david-")), "l.json"), DEFAULTS.budgets);
   for (let i = 0; i < 40; i++) ledger.charge("codex", 0);
   const h = harness({ ledger, changes: RISKY, replies: { [DS]: [APPROVE], [BACKUP]: [APPROVE] } });
   const out = await runPipeline(h.deps, input());
@@ -315,7 +315,7 @@ test("no test command is called out, so green does not read as tested", async ()
 
 test("report: status first, human-needed line only when it applies", () => {
   const done = formatReport({ status: "done", notes: [], plan: "", triggers: [] }, SMALL);
-  assert.match(done, /^jev_run: done/);
+  assert.match(done, /^david_run: done/);
   assert.match(done, /src\/a\.js \(\+5 -1\)/);
   assert.ok(!/human decision/.test(done));
   assert.match(formatReport({ status: "awaiting_human", notes: ["x"], plan: "", triggers: [] }), /human decision/);

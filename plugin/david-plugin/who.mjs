@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Who did the plugin run? Reads the run log written by jev_run and, when 9Router's
+// Who did the plugin run? Reads the run log written by david_run and, when 9Router's
 // database is present, lists what 9Router itself received during each run.
 //
 //   node who.mjs [N]        last N runs (default 1)
 //
-// Env: JEV_RUN_LOG (default ~/.dsh/jev-runs.jsonl), ROUTER9_DB (default ~/.9router/db/data.sqlite)
+// Env: DAVID_RUN_LOG (default ~/.dsh/david-runs.jsonl), ROUTER9_DB (default ~/.9router/db/data.sqlite)
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -60,12 +60,22 @@ export function router9Window(db, run) {
   return raw ? JSON.parse(raw) : [];
 }
 
+// Self-contained on purpose: this script is copied around on its own, so it imports nothing from the plugin.
+// After the 0.9.0 rename the first look brings the old jev-runs.jsonl across (copied, the original stays).
+function bringHistoryAcross(file) {
+  const old = join(dirname(file), basename(file).replace(/^david-/, "jev-"));
+  try {
+    if (basename(file).startsWith("david-") && !existsSync(file) && existsSync(old)) copyFileSync(old, file);
+  } catch { /* read whatever is there */ }
+}
+
 function main() {
   const n = Math.max(1, Number(process.argv[2]) || 1);
-  const file = process.env.JEV_RUN_LOG ?? join(homedir(), ".dsh", "jev-runs.jsonl");
+  const file = process.env.DAVID_RUN_LOG ?? join(homedir(), ".dsh", "david-runs.jsonl");
+  bringHistoryAcross(file);
   const db = process.env.ROUTER9_DB ?? join(homedir(), ".9router", "db", "data.sqlite");
   if (!existsSync(file)) {
-    console.error(`no run log at ${file}: jev_run has not completed a run yet`);
+    console.error(`no run log at ${file}: david_run has not completed a run yet`);
     process.exit(1);
   }
   for (const run of readRuns(file, n)) {

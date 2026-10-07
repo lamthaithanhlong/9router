@@ -11,7 +11,7 @@ import { createQueue, idSource, taskId } from "../../plugin/david-plugin/lib/que
 
 // A queue bug usually shows up as waiting forever, so every test here has a deadline and fails instead of hanging.
 const test = (name, fn) => nodeTest(name, { timeout: 15_000 }, fn);
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const FAST = { waitMs: 150, claimedWaitMs: 1000, pollMs: 10, settleMs: 0 };
 const ls = (dir, sub) => (existsSync(join(dir, sub)) ? readdirSync(join(dir, sub)) : []);
@@ -139,7 +139,7 @@ test("defaults: the queue route exists but is on no chain, so nothing waits for 
   assert.deepEqual(on.chains.planner, DEFAULTS.chains.planner, "other roles are untouched");
 });
 
-// ---- through jev_run: the worker goes to the queue, no Harness child is started for it ----
+// ---- through david_run: the worker goes to the queue, no Harness child is started for it ----
 function ctxWithStarts() {
   const starts = [];
   return {
@@ -156,7 +156,7 @@ const toolFor = (ctx, dir, extra = {}) => {
 };
 const run = (tool) => tool.execute({ task: "t", cwd: "/definitely/not/a/repo", plan: "no" }, { agent: {}, signal: new AbortController().signal }).catch((e) => e);
 
-test("jev_run with the queue first: a picked-up task starts no worker child", async () => {
+test("david_run with the queue first: a picked-up task starts no worker child", async () => {
   const dir = tmp();
   const ctx = ctxWithStarts();
   const tool = toolFor(ctx, dir);
@@ -168,7 +168,7 @@ test("jev_run with the queue first: a picked-up task starts no worker child", as
   assert.match(task, /cwd: \/definitely\/not\/a\/repo/);
 });
 
-test("jev_run with the queue first: an unclaimed task falls to the backup route and the task is withdrawn", async () => {
+test("david_run with the queue first: an unclaimed task falls to the backup route and the task is withdrawn", async () => {
   const dir = tmp();
   const ctx = ctxWithStarts();
   const tool = toolFor(ctx, dir, { cursorQueue: { dir, ...FAST, waitMs: 60 } });
@@ -179,7 +179,7 @@ test("jev_run with the queue first: an unclaimed task falls to the backup route 
   assert.deepEqual(ls(dir, "pending"), []);
 });
 
-test("jev_run with two sub-tasks: each gets its own task file, so neither overwrites the other", async () => {
+test("david_run with two sub-tasks: each gets its own task file, so neither overwrites the other", async () => {
   const dir = tmp();
   const ctx = ctxWithStarts();
   const tool = toolFor(ctx, dir);

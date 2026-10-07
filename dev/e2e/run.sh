@@ -20,7 +20,7 @@ mkdir -p "$D/home" "$D/p/plugins" "$D/ws"
 cp -R "$PKG/plugin/david-plugin" "$D/p/plugins/"
 write_patch() {  # $1 = scenario. F also makes the child tool filter name a tool the Harness does not have.
   local extra=""
-  [ "$1" = F ] && extra="        childTools: { denyAll: [jev_run, subagent, subagent_fork, workflow, bogus_tool_name], denyNonWorker: [write, edit] }"
+  [ "$1" = F ] && extra="        childTools: { denyAll: [david_run, subagent, subagent_fork, workflow, bogus_tool_name], denyNonWorker: [write, edit] }"
   cat > "$D/p/extra.yml" <<YML
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
@@ -35,8 +35,9 @@ write_patch() {  # $1 = scenario. F also makes the child tool filter name a tool
     - id: david-plugin
       name: ./plugins/david-plugin/index.js
       config:
-        runLog: $D/jev-runs.jsonl
-        ledgerFile: $D/jev-ledger.json
+        runLog: $D/david-runs.jsonl
+        ledgerFile: $D/david-ledger.json
+        stepsFile: $D/david-steps.jsonl   # without this the fake runs land in the REAL ~/.dsh feed
         laya: { enabled: false }
         limits: { startGapMs: { cursor: 0 } }   # e2e only: the 2 s spacing is unit-tested; here we want overlap
 ${extra}
@@ -51,7 +52,7 @@ for scen in A B C D E F; do
   write_patch "$scen"
   echo "$scen" > "$D/scenario"
   git -C "$D/repo" reset -q --hard && git -C "$D/repo" clean -fdxq
-  rm -f "$D/requests.jsonl" "$D/jev-runs.jsonl" "$D/jev-ledger.json"
+  rm -f "$D/requests.jsonl" "$D/david-runs.jsonl" "$D/david-ledger.json"
   E2E_DIR=$D PORT=$PORT SCRIPT="$HERE/script.mjs" node "$HERE/fake-llm.mjs" > "$D/fake.out" 2>&1 & FAKE_PID=$!
   sleep 1
   ( cd "$D/ws" && DSH_HOME="$D/home" FAKE_KEY=dummy E2E_DIR="$D" "$DSH_BIN" headless --patch "$D/p/extra.yml" "run the smoke task" > "$D/head-$scen.out" 2> "$D/head-$scen.err" ) & HP=$!
@@ -59,7 +60,7 @@ for scen in A B C D E F; do
   kill $HP 2>/dev/null || true
   kill "$FAKE_PID" 2>/dev/null || true; wait "$FAKE_PID" 2>/dev/null || true; FAKE_PID=
   cp "$D/requests.jsonl" "$D/requests-$scen.jsonl" 2>/dev/null || : > "$D/requests-$scen.jsonl"
-  [ -n "${E2E_VERBOSE:-}" ] && { echo "--- scenario $scen: what the head agent received from jev_run"; cat "$D/head-$scen.out"; echo; }
+  [ -n "${E2E_VERBOSE:-}" ] && { echo "--- scenario $scen: what the head agent received from david_run"; cat "$D/head-$scen.out"; echo; }
   node "$HERE/check.mjs" "$scen" "$D" || { fail=1; echo "--- head output:"; cat "$D/head-$scen.out"; echo "--- stderr:"; grep -v -E 'DEP0180|trace-deprecation' "$D/head-$scen.err" | head -10; }
 done
 exit $fail

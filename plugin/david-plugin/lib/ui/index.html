@@ -171,7 +171,7 @@
       <div class="hd">HARNESS · head agent <span class="tag ceo">CEO / CTO</span></div>
       <div class="bd">
         <div class="model" id="ceo-model">deepseek-flash · @deepseek-ai/dsh-agent</div>
-        <div class="txt">Gọi jev_run, duyệt plan, quyết cuối. <b>awaiting_human</b> ở đây là việc của nó.</div>
+        <div class="txt">Gọi david_run, duyệt plan, quyết cuối. <b>awaiting_human</b> ở đây là việc của nó.</div>
       </div>
     </div>
 
@@ -318,7 +318,7 @@ function flowModel() {
   const add = (col, n) => nodes.push({ col, ...n });
 
   const headSt = !run ? "pending" : runSt === "running" ? "running" : "done";
-  add("head", { key: "head", role: "head", label: "jev_run", sub: "CEO / CTO", st: headSt, kind: "head" });
+  add("head", { key: "head", role: "head", label: "david_run", sub: "CEO / CTO", st: headSt, kind: "head" });
 
   const layaSteps = (state?.steps ?? []).filter((s) => run && s.run === run.id && (s.role === "laya" || s.role === "jev"));
   const layaSt = !run ? "pending" : layaSteps.length || started ? "done" : "running";
@@ -485,9 +485,9 @@ $("log").addEventListener("click", (e) => {
 $("logbig").addEventListener("click", () => {
   const on = document.querySelector(".wrap").classList.toggle("big");
   $("logbig").textContent = on ? "⤡ thu" : "⤢ rộng";
-  try { localStorage.setItem("jevLogBig", on ? "1" : "0"); } catch { /* private window: the toggle still works */ }
+  try { localStorage.setItem("davidLogBig", on ? "1" : "0"); } catch { /* private window: the toggle still works */ }
 });
-try { if (localStorage.getItem("jevLogBig") === "1") $("logbig").click(); } catch { /* no storage */ }
+try { if (localStorage.getItem("davidLogBig") === "1") $("logbig").click(); } catch { /* no storage */ }
 
 const es = new EventSource("/events");
 let lastSnap = Date.now();

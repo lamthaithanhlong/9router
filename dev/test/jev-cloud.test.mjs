@@ -83,7 +83,7 @@ test("laya: with no key at all it goes straight to the local server (old behavio
 });
 
 test("laya: a failing cloud URL never starts the local server; a failing loopback does", async () => {
-  const ctl = join(mkdtempSync(join(tmpdir(), "jev-ctl-")), "laya-ctl");
+  const ctl = join(mkdtempSync(join(tmpdir(), "david-ctl-")), "laya-ctl");
   const { writeFileSync } = await import("node:fs");
   writeFileSync(ctl, "#!/bin/sh\n");
   const started = [];
@@ -127,7 +127,7 @@ test("api: the key may also come from a file, named (never valued) in the error"
 });
 
 test("pipeline: the Jev call is metered, and the daily cap skips it instead of spending", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "jev-cloud-"));
+  const dir = mkdtempSync(join(tmpdir(), "david-cloud-"));
   const ledger = new Ledger(join(dir, "ledger.json"), DEFAULTS.budgets);
 
   // Under the cap: the real input tokens are charged.
@@ -178,7 +178,7 @@ test("laya: opts.cloud === false never touches the hosted endpoint", async () =>
 });
 
 test("pipeline: a local fallback answer does not consume the hosted question quota", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "jev-quota-"));
+  const dir = mkdtempSync(join(tmpdir(), "david-quota-"));
   const ledger = new Ledger(join(dir, "ledger.json"), DEFAULTS.budgets);
   const deps = {
     cfg: resolveConfig(),

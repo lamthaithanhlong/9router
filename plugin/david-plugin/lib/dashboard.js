@@ -122,8 +122,8 @@ export function stagesOf(steps, runId) {
 }
 
 export function createDashboard({ cfg, ledger, version, log = () => {}, host = "127.0.0.1", port = 8787, pageFile, pollMs = 1000 }) {
-  const stepsFile = expandHome(cfg.stepsFile ?? "~/.dsh/jev-steps.jsonl");
-  const runsFile = expandHome(cfg.runLog ?? "~/.dsh/jev-runs.jsonl");
+  const stepsFile = expandHome(cfg.stepsFile ?? "~/.dsh/david-steps.jsonl");
+  const runsFile = expandHome(cfg.runLog ?? "~/.dsh/david-runs.jsonl");
   const cost = createCostTracker({ ...cfg, cost: { ...(cfg.cost ?? {}), dbFile: expandHome(cfg.cost?.dbFile ?? "~/.9router/db/data.sqlite") } }, { log });
 
   async function snapshot() {

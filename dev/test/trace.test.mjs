@@ -12,7 +12,7 @@ import { recordRun } from "../../plugin/david-plugin/lib/runlog.js";
 import { formatRun, readRuns, router9Window, windowSql } from "../../plugin/david-plugin/who.mjs";
 import { buildTool } from "../../plugin/david-plugin/index.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 const SMALL = { files: [{ path: "src/a.js", added: 5, removed: 1 }], diff: "d" };
 const RISKY = { files: [{ path: "src/auth/x.js", added: 5, removed: 1 }], diff: "d" };
 
@@ -91,7 +91,7 @@ test("run log: one JSON line per call, never throws", () => {
   assert.equal(recordRun("/dev/null/cannot/write.jsonl", { x: 1 }), false);
 });
 
-test("jev_run writes the run log with the trace, even when the run fails", async () => {
+test("david_run writes the run log with the trace, even when the run fails", async () => {
   const log = join(tmp(), "runs.jsonl");
   const cfg = resolveConfig({ runLog: log, laya: { enabled: false } });
   const ledger = new Ledger(join(tmp(), "l.json"), cfg.budgets);

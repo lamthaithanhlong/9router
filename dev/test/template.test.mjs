@@ -15,7 +15,7 @@ test("the template contains the skeleton block", () => {
 });
 
 test("skeleton loads, registers one tool, and the tool runs", async () => {
-  const file = join(mkdtempSync(join(tmpdir(), "jev-")), "index.mjs");
+  const file = join(mkdtempSync(join(tmpdir(), "david-")), "index.mjs");
   writeFileSync(file, block);
   const mod = await import(pathToFileURL(file).href);
   assert.equal(mod.name, "my-plugin");

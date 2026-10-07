@@ -10,7 +10,7 @@ import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js
 import { Limiter } from "../../plugin/david-plugin/lib/limiter.js";
 import { formatTrace, runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 const tick = () => new Promise((r) => setImmediate(r));
 
 test("defaults: Cursor is capped at 3 children, starts are spaced out, and only cursor shares that cap", () => {
@@ -177,7 +177,7 @@ const toolFor = (ctx) => {
   return buildTool(ctx, cfg, new Ledger(join(tmp(), "l.json"), cfg.budgets), () => {}, undefined, newLimiter(cfg));
 };
 
-test("jev_run refuses more sub-tasks or research questions than the limit, before starting anything", async () => {
+test("david_run refuses more sub-tasks or research questions than the limit, before starting anything", async () => {
   const ctx = toolCtx();
   const tool = toolFor(ctx);
   const seven = Array.from({ length: 7 }, (_, i) => `t${i}`);
@@ -186,7 +186,7 @@ test("jev_run refuses more sub-tasks or research questions than the limit, befor
   assert.equal(ctx.starts.length, 0, "nothing may start when the call is refused");
 });
 
-test("jev_run accepts the limit itself and tells the model about the cap", async () => {
+test("david_run accepts the limit itself and tells the model about the cap", async () => {
   const ctx = toolCtx();
   const tool = toolFor(ctx);
   assert.match(tool.parameters.properties.tasks.description, /At most 3 workers run at the same time/);
@@ -204,7 +204,7 @@ test("pipeline: manager-seat children are metered by the member's own upstream",
   assert.equal(h.state.max, 2, "three DeepSeek researchers must still respect the cap of 2");
 });
 
-test("one tool instance shares one cap across two simultaneous jev_run calls", async () => {
+test("one tool instance shares one cap across two simultaneous david_run calls", async () => {
   let active = 0, peak = 0;
   const ctx = {
     subagents: {

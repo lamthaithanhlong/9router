@@ -8,9 +8,9 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const PKG = fileURLToPath(new URL("../../", import.meta.url));
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 // Every script run in a test gets a stub `launchctl` first on PATH that only records its arguments.
-// A broken JEV_SKIP_LAUNCHCTL switch then hits the stub, never the real launchd (a mutated install.sh
+// A broken DAVID_SKIP_LAUNCHCTL switch then hits the stub, never the real launchd (a mutated install.sh
 // once registered a bogus com.jev.laya-keepalive job on the real machine).
 const STUB_DIR = tmp();
 const STUB_LOG = join(STUB_DIR, "calls.log");
@@ -20,7 +20,7 @@ const resetStub = () => writeFileSync(STUB_LOG, "");
 const sh = (script, args, env, { skipLaunchctl = true } = {}) =>
   execFileSync("bash", [join(PKG, script), ...args], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${STUB_DIR}:${process.env.PATH}`, ...(skipLaunchctl ? { JEV_SKIP_LAUNCHCTL: "1" } : {}), ...env },
+    env: { ...process.env, PATH: `${STUB_DIR}:${process.env.PATH}`, ...(skipLaunchctl ? { DAVID_SKIP_LAUNCHCTL: "1" } : {}), ...env },
   });
 
 // A fake machine: its own HOME with a LaunchAgents dir, and a Harness home with a desktop profile.
@@ -34,7 +34,7 @@ function machine() {
 }
 
 test("sandbox: tests never see the real HOME", () => {
-  assert.match(homedir(), /jev-home-/);
+  assert.match(homedir(), /david-home-/);
 });
 
 test("every test file imports the sandbox first (a new file that forgets would write into the real ~/.dsh)", () => {
@@ -90,7 +90,7 @@ test("install then uninstall returns the patch file byte for byte", () => {
   assert.deepEqual(readFileSync(patch), before);
 });
 
-test("JEV_SKIP_LAUNCHCTL keeps install and uninstall away from launchd entirely", () => {
+test("DAVID_SKIP_LAUNCHCTL keeps install and uninstall away from launchd entirely", () => {
   const m = machine();
   resetStub();
   sh("install.sh", ["--keepalive", "--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
@@ -167,4 +167,31 @@ test("uninstall removes an install that still has the old name", () => {
   sh("uninstall.sh", [], { HOME: m.home, DSH_HOME: m.dsh });
   assert.ok(!existsSync(join(profile, "plugins", "jev-orchestrator")));
   assert.equal(readFileSync(patch, "utf8"), "- id: other\n  name: keep-me\n# backend-review-mission:begin\n- id: mission\n# backend-review-mission:end\n");
+});
+
+test("install renames jev_* tool names inside the plugin block only, keeps a backup, and is idempotent", () => {
+  const m = machine();
+  const patch = join(m.dsh, "profiles", "desktop", "cordis.patch.yml");
+  const outside = "# note: jev_run is mentioned outside the block and must stay\n";
+  writeFileSync(patch, outside + [
+    "# david-plugin:begin",
+    "- insert:",
+    "    - id: david-plugin",
+    "      name: ./plugins/david-plugin/index.js",
+    "      config:",
+    "        childTools: { denyAll: [jev_run, jev_watch, subagent], denyNonWorker: [write] }   # keeps children off jev_probe",
+    "# david-plugin:end",
+    "",
+  ].join("\n"));
+  const out = sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.match(out, /tool names in the patch block renamed/);
+  const after = readFileSync(patch, "utf8");
+  assert.ok(after.includes("denyAll: [david_run, david_watch, subagent]"), "the filter now names the new tools");
+  assert.ok(after.includes("keeps children off david_probe"));
+  assert.ok(after.startsWith(outside), "text outside the block is untouched");
+  const profile = join(m.dsh, "profiles", "desktop");
+  assert.ok(readdirSync(profile).some((f) => f.startsWith("cordis.patch.yml.bak-tools-")));
+  const again = sh("install.sh", ["--no-check"], { HOME: m.home, DSH_HOME: m.dsh });
+  assert.ok(!/tool names in the patch block renamed/.test(again), "nothing left to rename the second time");
+  assert.equal(readFileSync(patch, "utf8"), after);
 });

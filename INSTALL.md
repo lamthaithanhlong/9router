@@ -2,7 +2,7 @@
 
 Bạn vừa nhận gói này (zip đã giải nén, hoặc còn là file `.zip`). Việc của bạn: cài plugin `david-plugin` vào profile `desktop` của Harness trên máy này, kiểm tra, rồi báo lại người dùng. Không cần hỏi lại từng bước; làm hết các bước dưới đây theo thứ tự.
 
-Plugin thêm một tool tên `jev_run`: chạy một việc code qua các vai theo chi phí. Cursor (`cursor-workers`) làm việc, Codex (`codex-head`) lập kế hoạch/research khi đáng quota, DeepSeek (`deepseek-v4.1-flash`) chỉ review diff rủi ro, Laya (local, miễn phí) chỉ quyết một việc: tác vụ tiếng Anh có cần plan không. Nó không quyết review (đã đo: không phân biệt được diff rủi ro), nên review do luật cứng gọi.
+Plugin thêm một tool tên `david_run`: chạy một việc code qua các vai theo chi phí. Cursor (`cursor-workers`) làm việc, Codex (`codex-head`) lập kế hoạch/research khi đáng quota, DeepSeek (`deepseek-v4.1-flash`) chỉ review diff rủi ro, Laya (local, miễn phí) chỉ quyết một việc: tác vụ tiếng Anh có cần plan không. Nó không quyết review (đã đo: không phân biệt được diff rủi ro), nên review do luật cứng gọi.
 
 ## Quy tắc khi cài
 
@@ -13,7 +13,7 @@ Plugin thêm một tool tên `jev_run`: chạy một việc code qua các vai th
 
 ## Các bước
 
-1. Nếu bạn chỉ có file `.zip`: giải nén vào một thư mục tạm, ví dụ `unzip -q david-plugin.zip -d /tmp/jev-install && cd /tmp/jev-install/david-plugin`. Nếu đã giải nén thì `cd` vào thư mục chứa file `install.sh`.
+1. Nếu bạn chỉ có file `.zip`: giải nén vào một thư mục tạm, ví dụ `unzip -q david-plugin.zip -d /tmp/david-install && cd /tmp/david-install/david-plugin`. Nếu đã giải nén thì `cd` vào thư mục chứa file `install.sh`.
 
 2. Chạy:
 
@@ -33,11 +33,11 @@ Plugin thêm một tool tên `jev_run`: chạy một việc code qua các vai th
 
 4. Nói người dùng: *"Đã cài xong. Hãy khởi động lại DeepSeek Harness, rồi bảo tôi kiểm tra."*
 
-5. Sau khi họ khởi động lại và nhắn bạn: xem danh sách tool của bạn có `jev_run` không.
-   - Có: gọi thử một lần cho việc nhỏ trong một thư mục git thử (ví dụ tạo repo tạm, `task: "thêm file hello.txt chứa chữ hi"`, `cwd` là repo đó, `plan: "no"`). Kết quả kỳ vọng: báo cáo `jev_run: done`, chỉ một agent Cursor chạy, không có review.
+5. Sau khi họ khởi động lại và nhắn bạn: xem danh sách tool của bạn có `david_run` không.
+   - Có: gọi thử một lần cho việc nhỏ trong một thư mục git thử (ví dụ tạo repo tạm, `task: "thêm file hello.txt chứa chữ hi"`, `cwd` là repo đó, `plan: "no"`). Kết quả kỳ vọng: báo cáo `david_run: done`, chỉ một agent Cursor chạy, không có review.
    - Không có: kiểm tra Harness có provider subagent tên `spawn` không (entry `subagent-spawn-in-process`). Plugin chỉ gắn tool khi provider đó xuất hiện. Báo người dùng kết quả; đừng sửa cấu hình ngoài khối đã thêm.
 
-6. Cho người dùng biết cách xem plugin đã chạy những ai: mục `Who ran:` ở đầu báo cáo của `jev_run`, và lệnh `node ~/.dsh/profiles/desktop/plugins/david-plugin/who.mjs` (xem thêm `~/.dsh/PLUGIN-TEMPLATE.md` §11.7).
+6. Cho người dùng biết cách xem plugin đã chạy những ai: mục `Who ran:` ở đầu báo cáo của `david_run`, và lệnh `node ~/.dsh/profiles/desktop/plugins/david-plugin/who.mjs` (xem thêm `~/.dsh/PLUGIN-TEMPLATE.md` §11.7).
 
 7. Báo cáo ngắn cho người dùng: đã cài gì, kết quả bước 3, kết quả bước 5, và nhắc rằng con số ngân sách (Codex 40 lượt/ngày, DeepSeek 300.000 token/ngày) là số giả định, sửa trong `config:` của entry `david-plugin` ở `cordis.patch.yml`.
 
@@ -63,7 +63,7 @@ Rồi khởi động lại Harness.
 
 ## Version
 
-Bản này ghi trong `plugin/david-plugin/package.json` và `CHANGELOG.md`. `install.sh` in `version: <cũ> -> <mới>`; khi báo cáo cho người dùng, nêu số version đã cài. Harness chỉ chạy bản mới sau khi khởi động lại; dòng `Plugin: david-plugin <version>` ở cuối báo cáo `jev_run` cho biết bản nào đang chạy thật.
+Bản này ghi trong `plugin/david-plugin/package.json` và `CHANGELOG.md`. `install.sh` in `version: <cũ> -> <mới>`; khi báo cáo cho người dùng, nêu số version đã cài. Harness chỉ chạy bản mới sau khi khởi động lại; dòng `Plugin: david-plugin <version>` ở cuối báo cáo `david_run` cho biết bản nào đang chạy thật.
 
 ## Gỡ
 
@@ -71,7 +71,7 @@ Bản này ghi trong `plugin/david-plugin/package.json` và `CHANGELOG.md`. `ins
 ./uninstall.sh
 ```
 
-Xoá plugin, khối trong `cordis.patch.yml` (file về đúng như trước khi cài), và LaunchAgent. Sổ chi tiêu `~/.dsh/jev-ledger.json` được giữ lại.
+Xoá plugin, khối trong `cordis.patch.yml` (file về đúng như trước khi cài), và LaunchAgent. Sổ chi tiêu `~/.dsh/david-ledger.json` được giữ lại.
 
 ## Viết plugin khác, hoặc dựng lại hệ thống
 
@@ -91,4 +91,4 @@ Cursor qua 9Router có thể trả lời "rỗng" (thật ra là lỗi đăng nh
       researcher: [codex, backup]
   ```
 
-- Muốn dùng app Cursor làm worker (không có API): `worker: [cursorqueue, backup]`, rồi nói với app Cursor: *"Xử lý hàng đợi Jev trong `~/.dsh/cursor-queue`: đọc README.md và làm theo."* Xem `PLUGIN-TEMPLATE.md` §11.10.
+- Muốn dùng app Cursor làm worker (không có API): `worker: [cursorqueue, backup]`, rồi nói với app Cursor: *"Xử lý hàng đợi david trong `~/.dsh/cursor-queue`: đọc README.md và làm theo."* Xem `PLUGIN-TEMPLATE.md` §11.10.

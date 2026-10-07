@@ -13,7 +13,7 @@ import { createLaya, looksEnglish } from "../../plugin/david-plugin/lib/laya.js"
 import { RouteHealth } from "../../plugin/david-plugin/lib/health.js";
 import { resolveRole } from "../../plugin/david-plugin/lib/roles.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 const ledgerAt = (day = "2026-10-06") => {
   let d = day;
   const file = join(tmp(), "ledger.json");

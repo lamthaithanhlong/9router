@@ -14,11 +14,11 @@ import { join } from "node:path";
 // A task nobody claims within waitMs is withdrawn (moved to expired/) and the call fails, so the
 // pipeline falls to the next route on the chain and the same work is never done twice.
 
-export const README = `# Jev queue
+export const README = `# david queue
 
-Tasks from the jev_run plugin wait here for you to run them in the Cursor app. Say to Cursor:
+Tasks from the david_run plugin wait here for you to run them in the Cursor app. Say to Cursor:
 
-    Process the Jev queue in this folder: read README.md and follow it.
+    Process the david queue in this folder: read README.md and follow it.
 
 ## What to do
 
@@ -47,7 +47,7 @@ the work to another model, so leave expired/ alone.
 
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "task";
 export const taskId = (stamp, n, label) => `${stamp}-${String(n).padStart(2, "0")}-${slug(label)}`;
-// One source per jev_run: the counter is what keeps two tasks with the same label (a fix round reuses "worker-fix") apart.
+// One source per david_run: the counter is what keeps two tasks with the same label (a fix round reuses "worker-fix") apart.
 export function idSource(stamp) {
   let n = 0;
   return (label) => taskId(stamp, ++n, label);
@@ -116,7 +116,7 @@ export function createQueue({ dir, waitMs = 300_000, claimedWaitMs = 1_800_000, 
         if (now() - start > waitMs) {
           // If the app claims it at this very moment the rename fails and the next pass sees it in claimed/.
           if (move(sub("pending", file), sub("expired", file))) {
-            throw new Error(`cursor queue: nobody picked ${id} up within ${Math.round(waitMs / 60000)} min (tell Cursor to process the Jev queue); the task was withdrawn`);
+            throw new Error(`cursor queue: nobody picked ${id} up within ${Math.round(waitMs / 60000)} min (tell Cursor to process the david queue); the task was withdrawn`);
           }
         }
       } else if (++missing >= 3) {

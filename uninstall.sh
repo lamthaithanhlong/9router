@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remove david-plugin from a Harness profile. Leaves other patch entries,
-# the spend ledger (~/.dsh/jev-ledger.json) and PLUGIN-TEMPLATE.md in place.
-# JEV_SKIP_LAUNCHCTL=1 leaves launchd alone (for tests).
+# the spend ledger (~/.dsh/david-ledger.json) and PLUGIN-TEMPLATE.md in place.
+# DAVID_SKIP_LAUNCHCTL=1 leaves launchd alone (for tests).
 #
 #   ./uninstall.sh [--profile desktop]
 set -euo pipefail
@@ -22,7 +22,7 @@ PATCH=$PDIR/cordis.patch.yml
 # "jev-orchestrator" is the name up to 0.7.x: remove an install under either name.
 for NAME in david-plugin jev-orchestrator; do
   if [ -f "$PATCH" ] && grep -q "# $NAME:begin" "$PATCH"; then
-    cp "$PATCH" "$PATCH.bak-jev-uninstall-$(date +%Y%m%d%H%M%S)"
+    cp "$PATCH" "$PATCH.bak-david-uninstall-$(date +%Y%m%d%H%M%S)"
     awk -v n="$NAME" 'index($0, "# " n ":begin"){skip=1} !skip{print} index($0, "# " n ":end"){skip=0}' "$PATCH" > "$PATCH.tmp"
     mv "$PATCH.tmp" "$PATCH"
     echo "patch entry ($NAME) removed from $PATCH"
@@ -38,7 +38,7 @@ done
 PLIST=$HOME/Library/LaunchAgents/com.jev.laya-keepalive.plist
 KEEPALIVE=$DSH_HOME/jev/laya-keepalive.sh
 if [ -f "$PLIST" ] && grep -q -F "$KEEPALIVE" "$PLIST"; then
-  [ -n "${JEV_SKIP_LAUNCHCTL:-}" ] || launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
+  [ -n "${DAVID_SKIP_LAUNCHCTL:-}" ] || launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
   rm -f "$PLIST" "$KEEPALIVE"
   echo "Laya keepalive removed"
 fi

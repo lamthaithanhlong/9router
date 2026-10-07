@@ -1,4 +1,4 @@
-// One JSON line per transition, so `node watch.mjs` and the `jev_watch` tool can show
+// One JSON line per transition, so `node watch.mjs` and the `david_watch` tool can show
 // progress for free. Append-only, never throws: a full disk must not kill a run.
 //
 // `step(text, extra)` writes one line of JSON in this shape:
@@ -17,7 +17,7 @@ function expandHome(p) {
 }
 
 export function createSteps(cfg, { log = () => {} } = {}) {
-  const configured = typeof cfg.stepsFile === "string" && cfg.stepsFile ? cfg.stepsFile : "~/.dsh/jev-steps.jsonl";
+  const configured = typeof cfg.stepsFile === "string" && cfg.stepsFile ? cfg.stepsFile : "~/.dsh/david-steps.jsonl";
   const file = expandHome(configured);
   let warned = false;
   // One line per broken feed, not one per step: a run that cannot write its feed must not

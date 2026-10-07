@@ -13,14 +13,14 @@ import { formatReport } from "../../plugin/david-plugin/lib/pipeline.js";
 import { formatRun, readRuns } from "../../plugin/david-plugin/who.mjs";
 
 const PKG = fileURLToPath(new URL("../../", import.meta.url));
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 const pkgJson = () => JSON.parse(readFileSync(join(PKG, "plugin/david-plugin/package.json"), "utf8"));
 const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 // Stub launchctl first on PATH: nothing here may reach the real launchd.
 const STUB = tmp();
 writeFileSync(join(STUB, "launchctl"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-const run = (script, args, env = {}) => execFileSync("bash", [join(PKG, script), ...args], { encoding: "utf8", env: { ...process.env, PATH: `${STUB}:${process.env.PATH}`, JEV_SKIP_LAUNCHCTL: "1", ...env } });
+const run = (script, args, env = {}) => execFileSync("bash", [join(PKG, script), ...args], { encoding: "utf8", env: { ...process.env, PATH: `${STUB}:${process.env.PATH}`, DAVID_SKIP_LAUNCHCTL: "1", ...env } });
 
 test("package.json carries a SemVer version", () => {
   assert.match(pkgJson().version, SEMVER);

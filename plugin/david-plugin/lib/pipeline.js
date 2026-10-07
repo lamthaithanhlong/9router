@@ -423,7 +423,7 @@ export function formatTrace(trace = []) {
 }
 
 export function formatReport(outcome, changes, version, cost, uiUrl = null) {
-  const lines = [`jev_run: ${outcome.status}`];
+  const lines = [`david_run: ${outcome.status}`];
   // The live view, first line after the status: the owner reads this in the chat and follows the
   // run in a browser. Free (it only reads files), so there is no reason to hide it.
   if (uiUrl) lines.push("", `Live: ${uiUrl}  - mo link de xem tung con dang chay (chi doc file, khong ton call)`);

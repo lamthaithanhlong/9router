@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createSteps } from "../../plugin/david-plugin/lib/steps.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-steps-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-steps-"));
 
 test("step: appends one JSON line per call, with ts / run / text and a few extras", () => {
   const dir = tmp();
-  const file = join(dir, "jev-steps.jsonl");
+  const file = join(dir, "david-steps.jsonl");
   const steps = createSteps({ stepsFile: file }, { log: () => {} });
   steps.step("worker-1 started on cursor-workers", { run: "abc", role: "worker", label: "worker-1", route: "cursor", model: "cursor-workers", usd: 0.0012, taskUsd: 0.0034 });
   steps.step("worker-1 done in 12.5s, $0.0011", { run: "abc", role: "worker", label: "worker-1", usd: 0.0011, taskUsd: 0.0011 });
@@ -66,8 +66,8 @@ test("step: does not throw when the path is unwritable, and logs once", () => {
   assert.equal(seen.filter((m) => /steps\.append/.test(m)).length, 1, "logged once");
 });
 
-test("step: defaults to ~/.dsh/jev-steps.jsonl when no file is given", () => {
-  // The sandbox has HOME set, so createSteps({}) must default to $HOME/.dsh/jev-steps.jsonl
+test("step: defaults to ~/.dsh/david-steps.jsonl when no file is given", () => {
+  // The sandbox has HOME set, so createSteps({}) must default to $HOME/.dsh/david-steps.jsonl
   const steps = createSteps({}, { log: () => {} });
   // We don't assert against the absolute path (it would tie to the sandbox internals); instead we
   // assert that .step() did not throw — the writer found the default path under the sandbox HOME.

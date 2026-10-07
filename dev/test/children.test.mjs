@@ -10,15 +10,15 @@ import { buildTool, denyFor } from "../../plugin/david-plugin/index.js";
 import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
 import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "jev-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "david-"));
 
 test("children never get the tools that start more agents; non-workers also lose write/edit", () => {
   const w = denyFor(DEFAULTS, "worker");
-  for (const t of ["jev_run", "subagent", "subagent_fork", "workflow"]) assert.ok(w.includes(t), `worker must not get ${t}`);
+  for (const t of ["david_run", "subagent", "subagent_fork", "workflow"]) assert.ok(w.includes(t), `worker must not get ${t}`);
   assert.ok(!w.includes("write") && !w.includes("edit"));
   for (const role of ["planner", "researcher", "reviewer", "final_reviewer"]) {
     const d = denyFor(DEFAULTS, role);
-    assert.ok(d.includes("write") && d.includes("edit") && d.includes("jev_run"), role);
+    assert.ok(d.includes("write") && d.includes("edit") && d.includes("david_run"), role);
   }
   assert.deepEqual(denyFor(resolveConfig({ childTools: { denyAll: ["x"] } }), "worker"), ["x"]);
   assert.equal(DEFAULTS.childTools.denyAll.length, 4); // defaults not mutated by denyFor
@@ -56,6 +56,6 @@ test("who.mjs prints output even when run through a symlinked path (macOS /tmp)"
   symlinkSync(real, join(dir, "link"));
   const log = join(dir, "runs.jsonl");
   writeFileSync(log, JSON.stringify({ ts: "2026-10-06T10:00:00.000Z", end: "2026-10-06T10:00:05.000Z", status: "done", cwd: "/r", task: "t", trace: [] }) + "\n");
-  const out = execFileSync("node", [join(dir, "link", "who.mjs"), "1"], { encoding: "utf8", env: { ...process.env, JEV_RUN_LOG: log, ROUTER9_DB: "/nonexistent" } });
+  const out = execFileSync("node", [join(dir, "link", "who.mjs"), "1"], { encoding: "utf8", env: { ...process.env, DAVID_RUN_LOG: log, ROUTER9_DB: "/nonexistent" } });
   assert.match(out, /2026-10-06T10:00:00\.000Z {2}done {2}\/r/);
 });
