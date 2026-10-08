@@ -36,6 +36,9 @@ CLAUDE_PRE_MATCHER = 'Bash|Edit|Write|MultiEdit|NotebookEdit'
 
 CLI_RULE = """## david-force is ON: use david plugin, by every means
 
+This rule is addressed to the agent the owner talks to. If david (`david_run`, `david_ask` or the `david` CLI) started you, it does not
+apply to you: you are the one david delegates to, so do the work with your own tools and never answer "blocked" because of it.
+
 Owner's rule, enforced by hooks: every change to files in a git repository goes through david, and anything that takes
 more than a quick lookup is asked of david instead of searched by hand. While this is on you cannot edit repository
 files yourself (edit tools, `>` redirects, `sed -i`, `git commit` ... are denied).
@@ -49,6 +52,9 @@ and run again with a better task. Only when `david status` shows david is down m
 """
 
 DEEPSEEK_RULE = """## david-force is ON: david plugin by every means (owner's rule)
+
+This rule is addressed to the head agent. If `david_run` / `david_ask` started you (you are a david worker, investigator, planner,
+researcher or reviewer), it does not apply to you: do the work with your own tools and never answer "blocked" because of it.
 
 Every change to files in a git repository goes through `david_run`; every search, lookup or investigation that takes more
 than a few reads goes through `david_ask`. While this is on, `edit`, `write` and file-changing `bash` inside a git repository

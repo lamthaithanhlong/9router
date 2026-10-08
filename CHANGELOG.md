@@ -19,7 +19,12 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 - **A worker answered "Blocked" and the run was reported `done`.** Putting Codex first in the worker chain showed it: a rule written for
   the agent that CALLS david ("every change goes through david_run") sits in `AGENTS.md` and in the system prompt, so the agents
   david starts see it too. Codex read it literally, noticed it had no `david_run`, wrote "Blocked: repository changes require
-  david_run" and changed nothing; DeepSeek workers had simply ignored the rule. Two fixes. (1) `prompts/worker.md`, `ask.md` and
+  david_run" and changed nothing; DeepSeek workers had simply ignored the rule. What actually stopped it was the rule in the
+  **system prompt** (it called it "developer policy"; the section `david-force` adds applies to every agent, workers included),
+  which outranks anything in a user-level prompt. Three fixes. (0) The `david-force` system-prompt section and the two rule blocks
+  (`AGENTS.md`) now begin by saying they are addressed to the head agent and that an agent started by `david_run` / `david_ask` / the
+  `david` CLI is exempt and must not answer "blocked". Verified live: with Codex first in every chain, the worker created the file
+  where it had refused three times before. (1) `prompts/worker.md`, `ask.md` and
   `researcher.md` now say the rule is addressed to the caller, does not apply to the child, and that the child must never answer
   "blocked" because of it. (2) A run whose workers produced an **empty diff** is no longer `done`: it is `awaiting_human`, with a
   note `no files changed: the workers produced no diff. They said: ...` quoting the workers, so the head agent sees why. An empty

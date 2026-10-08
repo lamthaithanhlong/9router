@@ -136,6 +136,11 @@ test("force prompt: the system-prompt section exists exactly while the rule is O
     assert.equal(f.sections.length, 1);
     assert.equal(f.sections[0].name, "david-force");
     assert.equal(f.sections[0].text, PROMPT);
+    // the section reaches every agent's system prompt, workers included; a Codex worker read it as "developer policy" and answered
+    // "Blocked" (2026-10-07), so the very first thing it says is who it is for
+    assert.match(PROMPT.split("\n")[1], /addressed to the HEAD agent/);
+    assert.match(PROMPT, /started you \(you are a david worker/);
+    assert.match(PROMPT, /never answer "blocked"/);
     force.sync();
     assert.equal(f.sections.length, 1, "not registered twice");
     setOn(false); force.sync();

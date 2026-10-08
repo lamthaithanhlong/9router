@@ -205,6 +205,7 @@ function denyText(repo, flavor) {
 
 export const PROMPT = [
   "david-force is ON (the owner's rule for this machine).",
+  "This rule is addressed to the HEAD agent: the one the owner talks to. If david_run, david_ask or the david CLI started you (you are a david worker, investigator, planner, researcher or reviewer), none of it applies to you: you are the one it delegates to, so do your job with your own tools and never answer \"blocked\" because of this rule.",
   "- Every change to files in a git repository goes through the david_run tool. You cannot edit, write or run file-changing shell commands inside a repository yourself: the call is refused.",
   "- Every search, lookup or investigation that would take more than a few reads goes through david_ask, not a chain of your own tool calls.",
   "- Your own tools are for the quick lookup, for files outside any repository (~/.dsh, ~/.codex, ~/.claude, ~/.agents) and for decisions.",

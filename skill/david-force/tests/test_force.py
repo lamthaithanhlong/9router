@@ -307,6 +307,12 @@ class Control(Sandbox):
         self.assertEqual(self.texts(), before, 'every file is back exactly as it was')
         self.assertTrue(force.hooks_installed('codex'), 'off leaves the hooks in place; they do nothing')
 
+    def test_the_rule_blocks_say_who_they_are_not_for(self):
+        for rule in (force.CLI_RULE, force.DEEPSEEK_RULE):
+            self.assertIn('does not', rule.split('Owner')[0] if 'Owner' in rule else rule)
+            self.assertIn('started you', rule)
+            self.assertIn('never answer "blocked"', rule)
+
     def test_unknown_target_is_refused(self):
         with self.assertRaises(SystemExit):
             force.parse_targets(['gemini'], ['deepseek'])
