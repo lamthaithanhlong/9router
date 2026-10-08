@@ -13,6 +13,12 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+### Added
+- **`david status --json`**: the same three checks (Harness runtime, desktop patch, david plugin version) as one JSON object,
+  `{"ok": ..., "checks": [{"name", "ok", "detail"}]}`, on a single line; the exit code is the same as without `--json`, and the
+  text output is unchanged. (Written by the DeepSeek harness through `david_run` with the david-force rule ON: it used
+  `david_ask` to read the code, `david_run` to write it, and made no direct edit.)
+
 ## [0.12.0] - 2026-10-07
 
 ### Changed

@@ -355,6 +355,62 @@ class Cli(unittest.TestCase):
     def stream(self, *events):
         return [json.dumps(e) for e in events]
 
+    def run_status(self, argv, dsh=True, patch=True, plugin=True, plugin_text='{"version": "9.9.9"}'):
+        """Run `david status ...` against a temp machine; (exit code, stdout, dsh path, patch path)."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        home = root / 'home'
+        dsh_path, patch_path = root / 'dsh', root / 'cordis.patch.yml'
+        if dsh:
+            dsh_path.write_text('')
+        if patch:
+            patch_path.write_text('')
+        if plugin:
+            pkg = home / '.dsh' / 'profiles' / 'desktop' / 'plugins' / 'david-plugin' / 'package.json'
+            pkg.parent.mkdir(parents=True)
+            pkg.write_text(plugin_text)
+        buf = io.StringIO()
+        with mock.patch.object(self.cli, 'DSH', str(dsh_path)), mock.patch.object(self.cli, 'PATCH', str(patch_path)), \
+                mock.patch.object(self.cli.Path, 'home', lambda: home), redirect_stdout(buf):
+            code = self.cli.main(list(argv))
+        return code, buf.getvalue(), str(dsh_path), str(patch_path)
+
+    def test_status_text_output_is_unchanged_and_exits_0_when_all_checks_pass(self):
+        code, out, dsh, patch = self.run_status(['status'])
+        self.assertEqual(code, 0)
+        self.assertEqual(out, f'ok  Harness runtime {dsh}\nok  desktop patch {patch}\nok  david plugin v9.9.9\n')
+
+    def test_status_json_is_exactly_one_object_when_all_checks_pass(self):
+        code, out, dsh, patch = self.run_status(['status', '--json'])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.count('\n'), 1, 'one JSON line and nothing else')
+        self.assertEqual(json.loads(out), {'ok': True, 'checks': [
+            {'name': 'Harness runtime', 'ok': True, 'detail': dsh},
+            {'name': 'desktop patch', 'ok': True, 'detail': patch},
+            {'name': 'david plugin', 'ok': True, 'detail': 'v9.9.9'}]})
+
+    def test_status_a_missing_check_fails_both_modes_with_a_string_detail(self):
+        code, out, dsh, _ = self.run_status(['status', '--json'], dsh=False)
+        self.assertEqual(code, 1)
+        data = json.loads(out)
+        self.assertFalse(data['ok'])
+        self.assertEqual([c['ok'] for c in data['checks']], [False, True, True])
+        self.assertEqual(data['checks'][0]['detail'], dsh)
+        self.assertIsInstance(data['checks'][0]['detail'], str)
+        self.assertIn('MISSING Harness runtime', self.run_status(['status'], dsh=False)[1])
+
+    def test_status_exit_code_is_the_same_with_and_without_json(self):
+        for dsh in (True, False):
+            with self.subTest(dsh=dsh):
+                self.assertEqual(self.run_status(['status'], dsh=dsh)[0], self.run_status(['status', '--json'], dsh=dsh)[0])
+
+    def test_status_a_malformed_plugin_file_is_ok_with_no_detail(self):
+        code, out, _, _ = self.run_status(['status', '--json'], plugin_text='{not json')
+        self.assertEqual(code, 0)
+        plugin = json.loads(out)['checks'][2]
+        self.assertEqual((plugin['ok'], plugin['detail']), (True, ''))
+
     def test_the_result_is_taken_by_call_id_not_scraped_from_the_reply(self):
         lines = self.stream({'type': 'tool_call', 'tool': 'david_ask', 'callId': 'c1', 'input': {}},
                             {'type': 'tool_call', 'tool': 'david_ask', 'callId': 'c2', 'input': {}},

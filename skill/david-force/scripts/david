@@ -3,7 +3,7 @@
 
   david run --cwd REPO [--test CMD] [--plan yes|no] [--allowed GLOB]... [--research Q]... [--final-review] TASK...
   david ask [--cwd DIR] [--words N] QUESTION...
-  david status
+  david status [--json]
 
 The plugin's tools (david_run, david_ask) only exist inside DeepSeek Harness, so this starts a headless Harness on the
 owner's own profile, tells its agent to call the tool exactly once, and prints what the tool returned. The tool's text is
@@ -74,7 +74,7 @@ def call(tool: str, args: dict, timeout: int) -> int:
     return exit_code(tool, text, status)
 
 
-def cmd_status() -> int:
+def cmd_status(as_json: bool = False) -> int:
     plugin = Path.home() / '.dsh' / 'profiles' / 'desktop' / 'plugins' / 'david-plugin' / 'package.json'
     rows = [('Harness runtime', os.path.exists(DSH), DSH),
             ('desktop patch', os.path.exists(PATCH), PATCH),
@@ -84,10 +84,13 @@ def cmd_status() -> int:
             rows[2] = ('david plugin', True, 'v' + json.loads(plugin.read_text()).get('version', '?'))
         except Exception:
             pass
-    ok = True
-    for label, good, extra in rows:
-        ok &= bool(good)
-        print(f"{'ok ' if good else 'MISSING'} {label} {extra}".rstrip())
+    ok = all(bool(good) for _, good, _ in rows)
+    if as_json:
+        print(json.dumps({'ok': ok, 'checks': [{'name': label, 'ok': bool(good), 'detail': extra}
+                                                for label, good, extra in rows]}))
+    else:
+        for label, good, extra in rows:
+            print(f"{'ok ' if good else 'MISSING'} {label} {extra}".rstrip())
     return 0 if ok else 1
 
 
@@ -108,10 +111,11 @@ def main(argv=None) -> int:
     a.add_argument('--words', type=int, dest='max_words')
     a.add_argument('--timeout', type=int, default=900)
     a.add_argument('question', nargs='+')
-    sub.add_parser('status', help='is david reachable?')
+    s = sub.add_parser('status', help='is david reachable?')
+    s.add_argument('--json', action='store_true', help='print the checks as one JSON object')
     ns = ap.parse_args(argv)
     if ns.cmd == 'status':
-        return cmd_status()
+        return cmd_status(ns.json)
     if ns.cmd == 'ask':
         args = {'question': ' '.join(ns.question)}
         if ns.cwd:
