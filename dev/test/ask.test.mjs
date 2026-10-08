@@ -72,3 +72,18 @@ test("formatAnswer: the answer comes first, then who ran and the cost; no list o
   assert.match(text, /Plugin: david plugin 9\.9\.9$/);
   assert.match(formatAnswer({ status: "awaiting_human", answer: "", notes: [], trace: [] }, null, null), /\(no answer\)/);
 });
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// A rule written for the agent that CALLS david ("every change goes through david_run") is visible to the agents david starts
+// too. A literal-minded model (Codex, 2026-10-07) read it, saw it had no david_run, and answered "Blocked". Their prompts say it
+// is not addressed to them.
+test("prompts: the agents david starts are told the 'use david' rule is not for them", () => {
+  const prompt = (f) => readFileSync(fileURLToPath(new URL(`../../plugin/david-plugin/prompts/${f}.md`, import.meta.url)), "utf8");
+  for (const f of ["worker", "ask", "researcher"]) {
+    assert.match(prompt(f), /does not apply to you/, `${f}.md must say the rule is not addressed to the child`);
+    assert.match(prompt(f), /david_run|david_ask/, f);
+  }
+  assert.match(prompt("worker"), /Never answer "blocked" because of it/);
+});

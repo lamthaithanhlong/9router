@@ -180,3 +180,24 @@ test("progress: disabled and session-less watchers are inert", () => {
   createProgress({ sessionsDir: tmp(), pollMs: 60_000 }, {}).watch({ sessionId: "x" }).tick();
   assert.deepEqual(lines, []);
 });
+
+test("progress: usage() adds up the prompt-cache numbers of a finished child from its session file", () => {
+  const root = tmp();
+  const id = "cccccccc-1111-2222-3333-444444444444";
+  mkdirSync(join(root, "--proj--", id), { recursive: true });
+  const ev = (u) => JSON.stringify({ type: "assistant/message", data: { message: { role: "assistant" }, usage: u } });
+  const other = JSON.stringify({ type: "tool/call", data: { name: "bash" } });
+  writeFileSync(join(root, "--proj--", id, "session.v4.jsonl"), [
+    ev({ inputTokens: 14000, cacheReadTokens: 0, outputTokens: 50 }), other,
+    ev({ inputTokens: 300, cacheReadTokens: 14000, outputTokens: 60 }),
+    ev({ inputTokens: 200, outputTokens: 70 }), // a provider that reports no cache field at all
+    "{half a line",
+  ].join("\n") + "\n");
+  const progress = createProgress({ sessionsDir: root }, {});
+  assert.deepEqual(progress.usage(id), { calls: 3, uncached: 14500, cached: 14000, output: 180 });
+  assert.equal(progress.usage("no-such-session"), null, "no file: no statistic, never an error");
+  const empty = "dddddddd-1111-2222-3333-444444444444";
+  mkdirSync(join(root, "--proj--", empty), { recursive: true });
+  writeFileSync(join(root, "--proj--", empty, "session.v4.jsonl"), other + "\n");
+  assert.equal(progress.usage(empty), null, "a session with no model call has nothing to report");
+});

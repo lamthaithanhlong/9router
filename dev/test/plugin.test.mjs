@@ -1,6 +1,7 @@
 import "./_sandbox.mjs";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -209,4 +210,24 @@ test("david_ask: refuses an empty question and a call with no agent; david_run d
   assert.ok(!("_mode" in r.runTool.parameters.properties), "a model must not be able to switch david_run into ask mode");
   assert.deepEqual(r.ask.parameters.required, ["question"]);
   assert.ok(r.ask.timeoutMs > 0 && r.ask.output.schema.type === "string");
+});
+
+test("a child's prompt-cache use is read from its session file and reaches the report", async () => {
+  const sessions = mkdtempSync(join(tmpdir(), "david-"));
+  const dir = join(sessions, "--proj--", "child-1");
+  mkdirSync(dir, { recursive: true });
+  const ev = (u) => JSON.stringify({ type: "assistant/message", data: { usage: u } });
+  writeFileSync(join(dir, "session.v4.jsonl"), [ev({ inputTokens: 14000, cacheReadTokens: 0, outputTokens: 50 }), ev({ inputTokens: 300, cacheReadTokens: 14000, outputTokens: 60 }), ev({ inputTokens: 200, cacheReadTokens: 14400, outputTokens: 70 })].join("\n") + "\n");
+  const repo = mkdtempSync(join(tmpdir(), "david-"));
+  const git = (...a) => execFileSync("git", a, { cwd: repo });
+  git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t");
+  writeFileSync(join(repo, "a.txt"), "x\n"); git("add", "-A"); git("commit", "-qm", "init");
+  writeFileSync(join(repo, "b.txt"), "the worker's change\n");
+  const f = fakeCtx();
+  const start = f.ctx.subagents.start;
+  f.ctx.subagents.start = async (...a) => ({ ...(await start(...a)), id: "child-1" });
+  const out = await runTool(f, { task: "t", cwd: repo, plan: "no" }, { progress: { sessionsDir: sessions, pollMs: 60000, heartbeatMs: 60000 } });
+  assert.match(out, /^david_run: done/);
+  assert.match(out, /cache 66% of 3 calls/, "28400 of 42900 prompt tokens were cache hits");
+  assert.ok(!/cache: /.test(out), "66% is healthy: no warning");
 });

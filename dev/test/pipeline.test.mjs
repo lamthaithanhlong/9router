@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { Ledger } from "../../plugin/david-plugin/lib/budget.js";
 import { DEFAULTS, resolveConfig } from "../../plugin/david-plugin/lib/config.js";
 import { RouteHealth } from "../../plugin/david-plugin/lib/health.js";
-import { formatReport, runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
+import { cacheStats, formatReport, formatTrace, runPipeline } from "../../plugin/david-plugin/lib/pipeline.js";
 
 const SMALL = { files: [{ path: "src/a.js", added: 5, removed: 1 }], diff: "diff --git a/src/a.js" };
 const RISKY = { files: [{ path: "src/auth/login.js", added: 5, removed: 1 }], diff: "diff --git auth" };
@@ -353,4 +353,51 @@ test("an empty answer cools the route down like any failure, so the next calls s
   const h2 = harness({ health, replies: { [CURSOR]: ["would be fine"], [BACKUP]: ["ok"] } });
   await runPipeline(h2.deps, input());
   assert.deepEqual(h2.calls, [BACKUP], "the cooling Cursor route is not tried again");
+});
+
+test("an empty diff is not 'done': a blocked worker hands the run back, with what it said", async () => {
+  const h = harness({ changes: { files: [], diff: "" }, replies: { [CURSOR]: ["Blocked: repository changes require david_run, unavailable in this session. No files changed."] } });
+  const out = await runPipeline(h.deps, input());
+  assert.equal(out.status, "awaiting_human", "green with nothing changed is how a refusing worker looked like a finished one");
+  const note = out.notes.find((n) => /no files changed/.test(n));
+  assert.ok(note, `a note says nothing changed: ${JSON.stringify(out.notes)}`);
+  assert.match(note, /Blocked: repository changes require david_run/, "and the worker's own words are in it, so the caller can see why");
+  assert.deepEqual(h.calls, [CURSOR], "it stopped there: no reviewer is paid to read an empty diff");
+});
+
+test("a run whose workers did change files is untouched by that rule", async () => {
+  const out = await runPipeline(harness().deps, input());
+  assert.equal(out.status, "done");
+  assert.ok(!out.notes.some((n) => /no files changed/.test(n)));
+});
+
+test("cache: a child's prompt-cache stats ride on the trace, show in the report, and a route that never hits is called out once", async () => {
+  const none = { calls: 19, uncached: 505767, cached: 0 };
+  const h = harness({ replies: { [CURSOR]: [{ text: "ok", cache: none }] } });
+  const out = await runPipeline(h.deps, input());
+  assert.equal(out.status, "done");
+  assert.deepEqual(out.trace.find((e) => e.role === "worker").cache, none);
+  const report = formatReport(out, SMALL, "9.9.9", null, null);
+  assert.match(report, /cache 0% of 19 calls/);
+  const warnings = out.notes.filter((n) => n.startsWith("cache: cursor "));
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /19 calls with 0% prompt-cache hits \(505767 tokens at full price\): that provider is not caching/);
+});
+
+test("cache: a healthy route, a short session and a child with no stats say nothing", async () => {
+  for (const cache of [{ calls: 12, uncached: 20000, cached: 900000 }, { calls: 2, uncached: 30000, cached: 0 }, undefined]) {
+    const h = harness({ replies: { [CURSOR]: [cache ? { text: "ok", cache } : "ok"] } });
+    const out = await runPipeline(h.deps, input());
+    assert.equal(out.status, "done");
+    assert.ok(!out.notes.some((n) => n.startsWith("cache:")), JSON.stringify(cache));
+  }
+  assert.match(formatTrace([{ role: "worker", label: "worker-1", provider: "p", model: "m", key: "k", ms: 1000, tokensIn: 1, tokensOut: 1, cache: { calls: 12, uncached: 20000, cached: 900000 } }]).join("\n"), /cache 98% of 12 calls/);
+  assert.doesNotMatch(formatTrace([{ role: "worker", label: "w", provider: "p", model: "m", key: "k", ms: 1, tokensIn: 1, tokensOut: 1 }]).join("\n"), /cache/);
+});
+
+test("cacheStats: the rate, and nothing when there is nothing to say", () => {
+  assert.deepEqual(cacheStats({ calls: 3, uncached: 250, cached: 750 }), { pct: 75, total: 1000 });
+  assert.equal(cacheStats(undefined), null);
+  assert.equal(cacheStats({ calls: 0, uncached: 0, cached: 0 }), null);
+  assert.equal(cacheStats({ calls: 4, uncached: 0, cached: 0 }), null);
 });

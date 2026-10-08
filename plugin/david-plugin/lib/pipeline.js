@@ -81,6 +81,7 @@ async function runAgent(deps, role, message, label, opts = {}) {
     deps.steps?.step(`${label} started on ${route.key}${route.via ? ` (via ${route.via})` : ""}`, { ...(route.via ? { via: route.via, turn: route.turn } : {}), run: deps.runId, role, label, route: route.key, model: route.model, usd: costOn ? deps.cost.assumeUsd(route.key) : 0, taskUsd: deps.cost?.taskUsd() ?? 0 });
 
     let text = "";
+    let cacheInfo = null; // prompt-cache stats of this call, when the spawn reported them
     let tokensReal = null;
     let failure;
     let cancelled = false; // the caller cancelled mid-call: the call did not succeed AND did not fail on its own
@@ -103,6 +104,7 @@ async function runAgent(deps, role, message, label, opts = {}) {
         text = raw;
       } else if (raw && typeof raw.text === "string") {
         text = raw.text;
+        if (raw.cache && Number.isFinite(raw.cache.calls)) cacheInfo = raw.cache;
         if (Number.isFinite(raw.tokensIn) && Number.isFinite(raw.tokensOut) && raw.tokensIn + raw.tokensOut > 0) {
           tokensReal = { tokensIn: raw.tokensIn, tokensOut: raw.tokensOut };
         }
@@ -162,7 +164,15 @@ async function runAgent(deps, role, message, label, opts = {}) {
         tokensOut: tokensReal ? tokensReal.tokensOut : estimateTokens(text),
         ...(calls > 0 ? { usd } : {}),
         ...(upstreamAttempts > 1 ? { attempts: upstreamAttempts } : {}),
+        ...(cacheInfo ? { cache: cacheInfo } : {}),
       });
+      // A provider that answers many calls without ever hitting its cache is costing full price for every token it re-reads
+      // (seen 2026-10-07: three sessions at 0% on a reseller gateway while its other sessions hit 97-99%). Say so in the report.
+      const miss = cacheMiss(cacheInfo);
+      if (miss && deps.notes && !deps.notes.some((n) => n.startsWith(`cache: ${route.key} `))) {
+        deps.notes.push(`cache: ${route.key} (${route.provider}/${route.model}) answered ${cacheInfo.calls} calls with ${miss.pct}% prompt-cache hits ` +
+          `(${cacheInfo.uncached} tokens at full price): that provider is not caching this session`);
+      }
       // The step feed is the owner's free live view: every call has a start line and a done line.
       deps.steps?.step(`${label} ${cancelled ? "cancelled after " : failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${upstreamAttempts > 1 ? ` (${upstreamAttempts} upstream attempts)` : ""}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });
     }
@@ -210,6 +220,17 @@ export function formatAnswer(outcome, version, cost, uiUrl = null) {
   if (version) lines.push("", `Plugin: david plugin ${version}`);
   return lines.join("\n");
 }
+
+// Prompt-cache hit rate of one call's stats, or null when there is nothing to say. `miss` only when it is clearly not caching.
+export function cacheStats(c) {
+  if (!c || !(c.calls > 0)) return null;
+  const total = (c.uncached || 0) + (c.cached || 0);
+  return total > 0 ? { pct: Math.round(((c.cached || 0) / total) * 100), total } : null;
+}
+const cacheMiss = (c) => {
+  const s = cacheStats(c);
+  return s && c.calls >= 3 && s.pct < 20 ? s : null;
+};
 
 // The plan goes first so every call shares one prefix and the cache hits.
 const withPlan = (plan, body) => (plan ? `# PLAN\n${plan}\n\n${body}` : body);
@@ -344,6 +365,14 @@ export async function runPipeline(deps, input) {
   const state = { maxStreak: 0 };
   let v = await verify(deps, input, plan, state, notes);
   if (!v.ok) return end("failed");
+  // A worker that was blocked, or declined, leaves exactly what a worker that finished a no-op leaves: an empty diff, and
+  // the report said "done" (seen 2026-10-07: a Codex worker answered "Blocked: ... must go through david_run" and the run was
+  // green). A change tool whose workers changed nothing is not done: hand it back with what the workers said.
+  if (v.changes.files.length === 0) {
+    const said = work.flatMap((w) => (w.status === "fulfilled" && w.value.status === "ok" ? [digest(w.value.text, 60)] : []));
+    notes.push(`no files changed: the workers produced no diff${said.length ? `. They said: ${said.join(" | ")}` : ""}`);
+    return end("awaiting_human");
+  }
 
   // 5. Gate 2: the paid reviewer. Rules first; Laya may only add a reason.
   triggers = gate2Triggers({ files: v.changes.files, allowedPaths: input.allowedPaths, testFailStreak: state.maxStreak }, cfg.gate2);
@@ -445,7 +474,7 @@ export function formatTrace(trace = []) {
       const fb = e.fellBack ? ", fallback" : "";
       const err = e.status === "error" ? ", FAILED" : e.status === "cancelled" ? ", CANCELLED" : "";
       const why = (e.status === "error" || e.status === "cancelled") && e.error ? ` (${e.error.replace(/\s+/g, " ").slice(0, 90)})` : "";
-      lines.push(`- ${e.label} -> ${e.provider}/${e.model} [${e.key}${fb}${err}] ${(e.ms / 1000).toFixed(1)}s${e.queuedMs ? ` (queued ${(e.queuedMs / 1000).toFixed(1)}s)` : ""} ~${e.tokensIn} in / ~${e.tokensOut} out tok${why}`);
+      lines.push(`- ${e.label} -> ${e.provider}/${e.model} [${e.key}${fb}${err}] ${(e.ms / 1000).toFixed(1)}s${e.queuedMs ? ` (queued ${(e.queuedMs / 1000).toFixed(1)}s)` : ""} ~${e.tokensIn} in / ~${e.tokensOut} out tok${cacheStats(e.cache) ? `, cache ${cacheStats(e.cache).pct}% of ${e.cache.calls} calls` : ""}${why}`);
     }
   }
   const ran = new Set(trace.map((e) => e.role));

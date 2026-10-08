@@ -13,6 +13,28 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-07
+
+### Fixed
+- **A worker answered "Blocked" and the run was reported `done`.** Putting Codex first in the worker chain showed it: a rule written for
+  the agent that CALLS david ("every change goes through david_run") sits in `AGENTS.md` and in the system prompt, so the agents
+  david starts see it too. Codex read it literally, noticed it had no `david_run`, wrote "Blocked: repository changes require
+  david_run" and changed nothing; DeepSeek workers had simply ignored the rule. Two fixes. (1) `prompts/worker.md`, `ask.md` and
+  `researcher.md` now say the rule is addressed to the caller, does not apply to the child, and that the child must never answer
+  "blocked" because of it. (2) A run whose workers produced an **empty diff** is no longer `done`: it is `awaiting_human`, with a
+  note `no files changed: the workers produced no diff. They said: ...` quoting the workers, so the head agent sees why. An empty
+  diff is exactly what a refusing worker and a finished no-op leave, and the report used to be green for both.
+
+### Added
+- **Prompt-cache visibility.** The report's "Who ran" line now ends with `cache 66% of 3 calls` for every child, read from the
+  `usage` of the child's own session (`inputTokens` is the part that was not a cache hit, `cacheReadTokens` the part that was;
+  `lib/progress.js` `usage()`). When a route answers three or more calls with under 20% hits, a note says so once per run:
+  `cache: deepseek (deepseek-host/...) answered 19 calls with 0% prompt-cache hits (505767 tokens at full price): that provider is
+  not caching this session`. Measured on this machine, 25 h: the head agent's own DeepSeek account hits 99% after the first call and
+  `cursor-workers` 94%, but the `deepseek-host` route (a third-party gateway, `modelapi.vn`) hit 74%, because three whole sessions
+  (19, 12 and 8 calls) hit 0% on every call while its other sessions hit 97-99%: about 90% of that route's uncached tokens.
+  The token estimates the ledger counts are unchanged.
+
 ### Added
 - **`DAVID_FORCE_DIRECT_LIMIT`**: how many direct tool calls a DeepSeek head-agent turn may make before it is sent back to use
   `david_*` (default 6, like the Codex hook's `DAVID_FORCE_STOP_MIN`). A positive integer only; anything else falls back to 6; read

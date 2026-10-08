@@ -103,6 +103,8 @@ function realRepo() {
   const git = (...a) => execFileSync("git", a, { cwd: dir });
   git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t");
   writeFileSync(join(dir, "a.txt"), "x\n"); git("add", "-A"); git("commit", "-qm", "init");
+  // the fake workers do not touch files; an empty diff is not "done" any more, so the repo already has the change they stand for
+  writeFileSync(join(dir, "work.txt"), "what the worker would have written\n");
   return dir;
 }
 

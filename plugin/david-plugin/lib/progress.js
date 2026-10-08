@@ -259,5 +259,30 @@ export function createProgress(cfg = {}, { log = () => {} } = {}) {
     };
   }
 
-  return { watch, opts };
+  // What a finished child cost in prompt tokens: how many were answered from the provider's cache. `assistant/message` carries
+  // usage per model call; inputTokens is the part that was NOT a cache hit.
+  function usage(sessionId) {
+    try {
+      const file = findSessionFile(dir, sessionId);
+      if (!file) return null;
+      const { text } = decodeFrom(readFileSync(file), 0);
+      const out = { calls: 0, uncached: 0, cached: 0, output: 0 };
+      for (const line of text.split("\n")) {
+        if (!line.includes('"usage"')) continue;
+        let e;
+        try { e = JSON.parse(line); } catch { continue; }
+        const u = e?.type === "assistant/message" ? e.data?.usage : null;
+        if (!u) continue;
+        out.calls += 1;
+        out.uncached += Number(u.inputTokens) || 0;
+        out.cached += Number(u.cacheReadTokens) || 0;
+        out.output += Number(u.outputTokens) || 0;
+      }
+      return out.calls ? out : null;
+    } catch {
+      return null; // a statistic must never fail a run
+    }
+  }
+
+  return { watch, usage, opts };
 }

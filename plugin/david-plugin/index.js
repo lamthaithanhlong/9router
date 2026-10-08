@@ -97,7 +97,10 @@ async function spawnChild(ctx, cfg, exec, route, prompt, label, role, { filter, 
   if (stopReason !== "completed") {
     throw new Error(`${label} ended with ${stopReason}${diagnostic ? `: ${diagnostic}` : ""}${text ? `\nPartial output:\n${text}` : ""}`);
   }
-  return text;
+  // How much of this child's prompt the provider answered from its cache. No tokensIn/tokensOut here on purpose: the ledger
+  // keeps counting what it always counted.
+  const cache = progress && run.id ? progress.usage(run.id) : null;
+  return cache ? { text, cache } : text;
 }
 
 const strings = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim() !== "") : []);
