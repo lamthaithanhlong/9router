@@ -27,6 +27,9 @@ A switch takes effect on the next tool call and never needs an app restart; only
 does. Turning a harness off removes its rule block and leaves the hooks in place, doing nothing. State:
 `~/.david-force/state.json`. A shell with `DAVID_FORCE_OFF=1` ignores the rule (for one command, for debugging).
 
+Tuning: `DAVID_FORCE_DIRECT_LIMIT` (DeepSeek harness, default 6) and `DAVID_FORCE_STOP_MIN` (Codex and Claude hooks, default 5) set how
+many direct tool calls a turn may make before it is sent back once to use david.
+
 ## What "mandatory" means, per harness
 
 | Harness | Changes to files in a git repository | Searches and investigations |

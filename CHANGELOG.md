@@ -14,6 +14,10 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 ## [Unreleased]
 
 ### Added
+- **`DAVID_FORCE_DIRECT_LIMIT`**: how many direct tool calls a DeepSeek head-agent turn may make before it is sent back to use
+  `david_*` (default 6, like the Codex hook's `DAVID_FORCE_STOP_MIN`). A positive integer only; anything else falls back to 6; read
+  at every check. (Written by the DeepSeek harness through `david_run` with the david-force rule ON, asked to "just edit it
+  yourself": it routed through `david_run` anyway.)
 - **`david status --json`**: the same three checks (Harness runtime, desktop patch, david plugin version) as one JSON object,
   `{"ok": ..., "checks": [{"name", "ok", "detail"}]}`, on a single line; the exit code is the same as without `--json`, and the
   text output is unchanged. (Written by the DeepSeek harness through `david_run` with the david-force rule ON: it used

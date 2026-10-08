@@ -220,6 +220,16 @@ export function isHead(agent) {
 
 const DIRECT_LIMIT = 6;
 
+/**
+ * How many direct tool calls a turn may make before it is sent back. DAVID_FORCE_DIRECT_LIMIT overrides the default 6, but
+ * only when it is a positive integer ("3"); anything else (unset, "abc", "0", "-2", "2.5") falls back to 6. Read on every
+ * check, not captured at module load, so a caller (a test, or the owner) can change it between checks.
+ */
+export function directLimit() {
+  const raw = process.env.DAVID_FORCE_DIRECT_LIMIT;
+  return typeof raw === "string" && /^[0-9]+$/.test(raw) && Number(raw) > 0 ? Number(raw) : DIRECT_LIMIT;
+}
+
 export function applyForce(ctx, { log = () => {}, name = "david-plugin" } = {}) {
   const disposers = [];
   const when = (deps, fn) => (typeof ctx.inject === "function" ? ctx.inject(deps, fn) : fn(ctx));
@@ -282,7 +292,7 @@ export function applyForce(ctx, { log = () => {}, name = "david-plugin" } = {}) 
       try {
         if (!isOn() || signal?.aborted || !isHead(agent)) return;
         const t = turnOf(agent);
-        if (t.steered || t.david > 0 || t.direct < DIRECT_LIMIT) return;
+        if (t.steered || t.david > 0 || t.direct < directLimit()) return;
         t.steered = true;
         agent.steer({ content: [{ type: "text", text: `david-force is ON: this turn made ${t.direct} direct tool calls and never called david. Do what is left through david_ask (anything you still need to find out) or david_run (any change); if david cannot do it, say exactly why in your answer instead of doing it by hand.` }], source: { kind: name } });
       } catch { /* the turn ends as it would have */ }

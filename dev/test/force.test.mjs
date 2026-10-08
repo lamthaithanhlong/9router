@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PROMPT, analyze, applyForce, commandModifies, enabled, isHead, isOn, reasonToDeny } from "../../plugin/david-plugin/lib/force.js";
+import { PROMPT, analyze, applyForce, commandModifies, directLimit, enabled, isHead, isOn, reasonToDeny } from "../../plugin/david-plugin/lib/force.js";
 
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL("../../skill/david-force/tests/commands.json", import.meta.url)), "utf8"));
 
@@ -210,6 +210,80 @@ test("force prompt: the service is taken from the context ctx.inject hands over 
     assert.equal(sections.length, 0);
     setOn(true); force.sync();
     assert.equal(sections.length, 1);
+  } finally { force.dispose(); setOn(false); }
+});
+
+test("force steer: DAVID_FORCE_DIRECT_LIMIT=3 sends a turn back after 3 direct calls, and the limit is re-read each check", () => {
+  const f = fakeCtx();
+  const force = applyForce(f.ctx);
+  const steers = [];
+  const agent = { ...head(), steer: (m) => steers.push(m) };
+  agent.session.id = "lim";
+  f.agents.set("lim", agent);
+  const ev = (type, data) => f.handlers.get("session/event")(agent.session, { type, data });
+  const stop = () => f.handlers.get("agent/turn-stopping")({ agent, signal: { aborted: false } });
+  const turn = (n) => { ev("user/message", { source: { kind: "user" } }); for (let i = 0; i < n; i++) ev("tool/call", { name: "bash" }); stop(); };
+  try {
+    setOn(true);
+    process.env.DAVID_FORCE_DIRECT_LIMIT = "3";
+    turn(2);
+    assert.equal(steers.length, 0, "2 direct calls is under a limit of 3");
+    turn(3);
+    assert.equal(steers.length, 1, "3 direct calls reaches a limit of 3");
+    assert.match(steers[0].content[0].text, /3 direct tool calls/);
+    // the value is read at each check, not captured at module load
+    process.env.DAVID_FORCE_DIRECT_LIMIT = "9";
+    turn(3);
+    assert.equal(steers.length, 1, "the raised limit applies to the next check");
+    turn(9);
+    assert.equal(steers.length, 2, "9 direct calls reaches a limit of 9");
+  } finally { force.dispose(); delete process.env.DAVID_FORCE_DIRECT_LIMIT; setOn(false); }
+});
+
+test("force steer: an invalid DAVID_FORCE_DIRECT_LIMIT falls back to 6 (5 direct calls do not steer, 6 do)", () => {
+  const f = fakeCtx();
+  const force = applyForce(f.ctx);
+  const steers = [];
+  const agent = { ...head(), steer: (m) => steers.push(m) };
+  agent.session.id = "bad";
+  f.agents.set("bad", agent);
+  const ev = (type, data) => f.handlers.get("session/event")(agent.session, { type, data });
+  const stop = () => f.handlers.get("agent/turn-stopping")({ agent, signal: { aborted: false } });
+  const turn = (n) => { ev("user/message", { source: { kind: "user" } }); for (let i = 0; i < n; i++) ev("tool/call", { name: "read" }); stop(); };
+  try {
+    setOn(true);
+    for (const bad of [undefined, "abc", "0", "-2", "2.5"]) {
+      if (bad === undefined) delete process.env.DAVID_FORCE_DIRECT_LIMIT; else process.env.DAVID_FORCE_DIRECT_LIMIT = bad;
+      turn(5);
+      assert.equal(steers.length, 0, `${bad}: 5 direct calls is under the fallback 6`);
+      turn(6);
+      assert.equal(steers.length, 1, `${bad}: 6 direct calls reaches the fallback 6`);
+      steers.length = 0;
+    }
+  } finally { force.dispose(); delete process.env.DAVID_FORCE_DIRECT_LIMIT; setOn(false); }
+});
+
+test("force steer: with the variable unset the default is still 6", () => {
+  delete process.env.DAVID_FORCE_DIRECT_LIMIT;
+  assert.equal(directLimit(), 6);
+  const f = fakeCtx();
+  const force = applyForce(f.ctx);
+  const steers = [];
+  const agent = { ...head(), steer: (m) => steers.push(m) };
+  agent.session.id = "def";
+  f.agents.set("def", agent);
+  const ev = (type, data) => f.handlers.get("session/event")(agent.session, { type, data });
+  const stop = () => f.handlers.get("agent/turn-stopping")({ agent, signal: { aborted: false } });
+  try {
+    setOn(true);
+    ev("user/message", { source: { kind: "user" } });
+    for (let i = 0; i < 5; i++) ev("tool/call", { name: "bash" });
+    stop();
+    assert.equal(steers.length, 0);
+    ev("tool/call", { name: "bash" });
+    stop();
+    assert.equal(steers.length, 1);
+    assert.match(steers[0].content[0].text, /6 direct tool calls/);
   } finally { force.dispose(); setOn(false); }
 });
 
