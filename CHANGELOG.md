@@ -13,6 +13,18 @@ How to bump (see `PLUGIN-TEMPLATE.md` §13):
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-08
+
+### Added
+- **A route that does not cache is put aside instead of only being reported.** On 2026-10-07 a worker session on the reseller gateway behind
+  `deepseek` ran 19 calls at 0% prompt-cache hits (505,767 tokens at full price) while its other sessions hit 97%; its `usage` carried no
+  `cacheReadTokens` at all. A watched route (`limits.cacheWatch`, default `["deepseek"]`) that answers 3+ calls of one session under 20% is now
+  skipped for `limits.cacheDemoteMs` (default 30 min, `0` = report only) whenever another route on the chain can take the work; it comes back
+  by itself. The report says which of the two it was: "not caching" or "reports no cache tokens" (`progress.usage()` now returns `reported`,
+  the number of calls that carried the field, so a silent provider is not mistaken for 0 hits).
+- This cannot make the gateway cache: that is on its side. Whether `modelapi.vn` truly does not cache or only does not say needs two direct
+  calls with the same long prompt (needs its API key).
+
 ## [0.13.0] - 2026-10-07
 
 ### Fixed

@@ -118,6 +118,11 @@ export const DEFAULTS = {
     testTimeoutMs: 600_000,
     // After a route fails at run time it is skipped for this long, so the next calls go straight to the next route.
     routeCooldownMs: 600_000,
+    // A watched route that answers 3+ calls of one session with under 20% prompt-cache hits (or never reports cache tokens
+    // at all) is skipped for this long while another route on the chain can take the work (0 = only say so in the report).
+    // Seen 2026-10-07: the reseller gateway behind `deepseek` ran a 19-call session at 0% while its other sessions hit 97%.
+    cacheDemoteMs: 1_800_000,
+    cacheWatch: ["deepseek"],
     // Children running at once per upstream group, across ALL david_run calls. More are queued, not refused.
     // Cursor (cursor-workers) is capped at 3 because it rate-limited the owner.
     concurrency: { cursor: 3, codex: 2, deepseek: 2, backup: 2, cursorqueue: 3 },

@@ -194,7 +194,11 @@ test("progress: usage() adds up the prompt-cache numbers of a finished child fro
     "{half a line",
   ].join("\n") + "\n");
   const progress = createProgress({ sessionsDir: root }, {});
-  assert.deepEqual(progress.usage(id), { calls: 3, uncached: 14500, cached: 14000, output: 180 });
+  assert.deepEqual(progress.usage(id), { calls: 3, reported: 2, uncached: 14500, cached: 14000, output: 180 });
+  const mute = "eeeeeeee-1111-2222-3333-444444444444";
+  mkdirSync(join(root, "--proj--", mute), { recursive: true });
+  writeFileSync(join(root, "--proj--", mute, "session.v4.jsonl"), [ev({ inputTokens: 9, outputTokens: 1 }), ev({ inputTokens: 9, outputTokens: 1 })].join("\n") + "\n");
+  assert.equal(progress.usage(mute).reported, 0, "no call carried a cache field: the provider is silent, which is not the same as 0 hits");
   assert.equal(progress.usage("no-such-session"), null, "no file: no statistic, never an error");
   const empty = "dddddddd-1111-2222-3333-444444444444";
   mkdirSync(join(root, "--proj--", empty), { recursive: true });

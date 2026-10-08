@@ -10,6 +10,11 @@ export class RouteHealth {
     this.until.set(key, this.now() + this.cooldownMs);
   }
 
+  // Skip this route for `ms` without calling it a failure; a longer cooldown already in force stays.
+  demote(key, ms) {
+    this.until.set(key, Math.max(this.until.get(key) ?? 0, this.now() + ms));
+  }
+
   ok(key) {
     this.until.delete(key);
   }

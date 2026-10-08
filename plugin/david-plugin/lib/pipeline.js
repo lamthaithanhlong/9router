@@ -170,8 +170,16 @@ async function runAgent(deps, role, message, label, opts = {}) {
       // (seen 2026-10-07: three sessions at 0% on a reseller gateway while its other sessions hit 97-99%). Say so in the report.
       const miss = cacheMiss(cacheInfo);
       if (miss && deps.notes && !deps.notes.some((n) => n.startsWith(`cache: ${route.key} `))) {
+        const silent = cacheInfo.reported === 0; // not one call carried a cache field: the provider does not report it (or does not cache)
         deps.notes.push(`cache: ${route.key} (${route.provider}/${route.model}) answered ${cacheInfo.calls} calls with ${miss.pct}% prompt-cache hits ` +
-          `(${cacheInfo.uncached} tokens at full price): that provider is not caching this session`);
+          `(${cacheInfo.uncached} tokens at full price): ${silent ? "that provider reports no cache tokens, so it is not caching (or not saying)" : "that provider is not caching this session"}`);
+      }
+      // Say it once, then act on it: a watched route that does not cache is skipped for a while, so the next calls go to a route that does.
+      const demoteMs = deps.cfg?.limits?.cacheDemoteMs ?? 0;
+      if (miss && demoteMs > 0 && (deps.cfg?.limits?.cacheWatch ?? []).includes(route.key) && deps.health?.demote && !deps.health.cooling(route.key)) {
+        deps.health.demote(route.key, demoteMs);
+        deps.log(`${role} on ${route.key}: no prompt cache (${miss.pct}% of ${cacheInfo.calls} calls); skipping it for ${Math.round(demoteMs / 60000)} min`);
+        deps.notes?.push(`cache: ${route.key} skipped for ${Math.round(demoteMs / 60000)} min while another route can take the work`);
       }
       // The step feed is the owner's free live view: every call has a start line and a done line.
       deps.steps?.step(`${label} ${cancelled ? "cancelled after " : failure ? "failed in " : "done in "}${((Date.now() - t0) / 1000).toFixed(1)}s, $${usd.toFixed(4)}${upstreamAttempts > 1 ? ` (${upstreamAttempts} upstream attempts)` : ""}${failure ? ` (${String(failure.message ?? failure).slice(0, 80)})` : ""}`, { run: deps.runId, role, label, route: route.key, model: route.model, usd, taskUsd: deps.cost?.taskUsd() ?? 0, ...(failure ? { status: "error" } : {}) });

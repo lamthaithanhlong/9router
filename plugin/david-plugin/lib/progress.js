@@ -266,7 +266,7 @@ export function createProgress(cfg = {}, { log = () => {} } = {}) {
       const file = findSessionFile(dir, sessionId);
       if (!file) return null;
       const { text } = decodeFrom(readFileSync(file), 0);
-      const out = { calls: 0, uncached: 0, cached: 0, output: 0 };
+      const out = { calls: 0, reported: 0, uncached: 0, cached: 0, output: 0 };
       for (const line of text.split("\n")) {
         if (!line.includes('"usage"')) continue;
         let e;
@@ -275,6 +275,7 @@ export function createProgress(cfg = {}, { log = () => {} } = {}) {
         if (!u) continue;
         out.calls += 1;
         out.uncached += Number(u.inputTokens) || 0;
+        if (u.cacheReadTokens !== undefined && u.cacheReadTokens !== null) out.reported += 1; // a provider may not send the field at all
         out.cached += Number(u.cacheReadTokens) || 0;
         out.output += Number(u.outputTokens) || 0;
       }

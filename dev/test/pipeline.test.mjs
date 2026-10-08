@@ -401,3 +401,36 @@ test("cacheStats: the rate, and nothing when there is nothing to say", () => {
   assert.equal(cacheStats({ calls: 0, uncached: 0, cached: 0 }), null);
   assert.equal(cacheStats({ calls: 4, uncached: 0, cached: 0 }), null);
 });
+
+test("cache: a watched route that never hits is skipped for a while; an unwatched one is only reported", async () => {
+  const none = { calls: 19, reported: 0, uncached: 505767, cached: 0 };
+  const watched = { ...DEFAULTS, limits: { ...DEFAULTS.limits, cacheWatch: ["cursor"], cacheDemoteMs: 1_800_000 } };
+  let t = 0;
+  const health = new RouteHealth(600_000, () => t);
+  const h = harness({ cfg: watched, health, replies: { [CURSOR]: [{ text: "ok", cache: none }] } });
+  const out = await runPipeline(h.deps, input());
+  assert.equal(out.status, "done");
+  assert.equal(health.cooling("cursor"), true, "the route that does not cache is put aside");
+  t = 1_799_000; assert.equal(health.cooling("cursor"), true);
+  t = 1_801_000; assert.equal(health.cooling("cursor"), false, "and comes back after the cooldown");
+  assert.match(out.notes.find((n) => n.startsWith("cache: cursor (")), /reports no cache tokens/);
+  assert.ok(out.notes.some((n) => /cache: cursor skipped for 30 min/.test(n)));
+
+  const h2 = new RouteHealth(600_000);
+  const out2 = await runPipeline(harness({ health: h2, replies: { [CURSOR]: [{ text: "ok", cache: none }] } }).deps, input());
+  assert.equal(out2.status, "done");
+  assert.equal(h2.cooling("cursor"), false, "default watch list is deepseek only");
+
+  const h3 = new RouteHealth(600_000);
+  const off = { ...watched, limits: { ...watched.limits, cacheDemoteMs: 0 } };
+  await runPipeline(harness({ cfg: off, health: h3, replies: { [CURSOR]: [{ text: "ok", cache: none }] } }).deps, input());
+  assert.equal(h3.cooling("cursor"), false, "cacheDemoteMs 0 turns it off");
+});
+
+test("RouteHealth.demote never shortens a longer cooldown", () => {
+  let t = 0;
+  const h = new RouteHealth(600_000, () => t);
+  h.fail("k"); h.demote("k", 1000);
+  t = 599_000; assert.equal(h.cooling("k"), true);
+  h.demote("k", 5_000_000); t = 4_000_000; assert.equal(h.cooling("k"), true);
+});
