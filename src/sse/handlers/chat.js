@@ -25,6 +25,7 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
+import { rateRuleFor, acquireSlot, rateLimitState } from "open-sse/services/modelRateLimit.js";
 
 /**
  * Handle chat completion request
@@ -267,7 +268,22 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     // Use shared chatCore
     const chatSettings = await getSettings();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
-    const result = await handleChatCore({
+    // a model whose upstream cannot keep up is paced here, for every caller at once (open-sse/services/modelRateLimit.js)
+    const rateRule = rateRuleFor(chatSettings, provider, model);
+    let releaseSlot = null;
+    if (rateRule) {
+      try {
+        releaseSlot = await acquireSlot(rateRule);
+      } catch (e) {
+        if (!e?.rateLimited) throw e;
+        const st = rateLimitState(rateRule.match);
+        log.warn("RATE", `[${provider}/${model}] ${e.message} (${st.active} running, ${st.waiting} waiting)`);
+        return errorResponse(HTTP_STATUS.RATE_LIMITED || 429, `[${provider}/${model}] paced by the router: too many requests waiting`, { "retry-after": String(Math.ceil(e.retryAfterMs / 1000)) });
+      }
+    }
+    let result;
+    try {
+    result = await handleChatCore({
       body: { ...body, model: `${provider}/${model}` },
       modelInfo: { provider, model },
       credentials: refreshedCredentials,
@@ -310,6 +326,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         clearAntigravityStrikes(credentials.connectionId, model);
       }
     });
+    } finally {
+      releaseSlot?.();
+    }
 
     if (result.success) return result.response;
 
