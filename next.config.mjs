@@ -30,6 +30,11 @@ const nextConfig = {
     root: tracingRoot
   },
   outputFileTracingRoot: tracingRoot,
+  // The DeepSeek PoW worker is traced through new Worker(new URL(...)), but its own
+  // import of deepseek-pow-hash.js is not, so the standalone build shipped without it.
+  outputFileTracingIncludes: {
+    "*": ["./open-sse/lib/deepseek-pow-hash.js"]
+  },
   outputFileTracingExcludes: {
     "*": ["./gitbook/**/*"]
   },
