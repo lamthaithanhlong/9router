@@ -15,9 +15,8 @@ export default {
   },
   category: "webCookie",
   authType: "cookie",
-  // LLM-only provider, parked: no service kind means it stays out of every
-  // dashboard list while the code and saved connections remain intact.
-  serviceKinds: [],
+  // Listed again (Pro): an empty array is not nullish, so the ["llm"] default never applied and the dashboard hid it.
+  serviceKinds: ["llm"],
   authHint: "Paste your __Secure-next-auth.session-token cookie value from perplexity.ai",
   transport: {
     baseUrl: "https://www.perplexity.ai/rest/sse/perplexity_ask",
