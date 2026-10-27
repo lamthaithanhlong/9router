@@ -2,10 +2,32 @@ import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
 import { SSE_DONE, SSE_HEADERS_NO_BUFFER } from "../utils/sseConstants.js";
 import { sseChunk } from "../utils/sse.js";
+import { appendFileSync } from "node:fs";
 
 const PPLX_SSE_ENDPOINT = PROVIDERS["perplexity-web"].baseUrl;
 const PPLX_API_VERSION = "2.18";
 const PPLX_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+
+// Shape-only debug log, off unless PPLX_SHAPE_LOG names a file: event keys, block usages and value lengths, never values or cookies.
+const PPLX_SHAPE_LOG = process.env.PPLX_SHAPE_LOG || "";
+function shapeOf(v, depth = 0) {
+  if (v === null || v === undefined) return String(v);
+  if (typeof v === "string") return `str:${v.length}`;
+  if (typeof v !== "object") return typeof v;
+  if (depth >= 5) return Array.isArray(v) ? `arr:${v.length}` : "obj";
+  if (Array.isArray(v)) return { arr: v.length, first: v.length ? shapeOf(v[0], depth + 1) : null };
+  const out = {};
+  for (const k of Object.keys(v).slice(0, 40)) out[k] = shapeOf(v[k], depth + 1);
+  return out;
+}
+function logShape(event) {
+  if (!PPLX_SHAPE_LOG) return;
+  try {
+    if (event?._event) { appendFileSync(PPLX_SHAPE_LOG, JSON.stringify({ at: Date.now(), event: event._event }) + "\n"); return; }
+    const usages = Array.isArray(event?.blocks) ? event.blocks.map((b) => b?.intended_usage ?? "?") : null;
+    appendFileSync(PPLX_SHAPE_LOG, JSON.stringify({ at: Date.now(), usages, shape: shapeOf(event) }) + "\n");
+  } catch { /* debug only */ }
+}
 
 const MODEL_MAP = {
   "pplx-auto": ["concise", "pplx_pro"],
@@ -101,7 +123,7 @@ async function* readPplxSseEvents(body, signal) {
     dataLines = [];
     const trimmed = payload.trim();
     if (!trimmed || trimmed === "[DONE]") return "done";
-    try { return JSON.parse(trimmed); } catch { return null; }
+    try { return JSON.parse(trimmed); } catch { logShape({ _parse_error: true, _len: trimmed.length, _head: trimmed.slice(0, 1) }); return null; }
   }
 
   try {
@@ -123,6 +145,7 @@ async function* readPplxSseEvents(body, signal) {
           continue;
         }
         if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+        if (line.startsWith("event:")) logShape({ _event: line.slice(6).trim().slice(0, 40) });
         if (line === "event: end_of_stream") return;
       }
     }
@@ -215,6 +238,7 @@ async function* extractContent(eventStream, signal) {
   const seenThinking = new Set();
 
   for await (const event of readPplxSseEvents(eventStream, signal)) {
+    logShape(event);
     if (event.error_code || event.error_message) {
       yield { error: event.error_message || `Perplexity error: ${event.error_code}`, done: true };
       return;
@@ -256,23 +280,25 @@ async function* extractContent(eventStream, signal) {
         }
       }
 
-      if (!usage.includes("markdown")) continue;
+      // The answer block is "ask_text" since 10-2026 (it was "*markdown*" before); both carry markdown_block.
+      if (!usage.includes("markdown") && usage !== "ask_text") continue;
       const mb = block.markdown_block;
       if (!mb) continue;
-      const chunks = mb.chunks ?? [];
+      let chunks = Array.isArray(mb.chunks) ? mb.chunks : [];
+      if (chunks.length === 0 && typeof mb.answer === "string") chunks = [mb.answer];
       if (chunks.length === 0) continue;
 
-      if (mb.progress === "DONE") {
-        fullAnswer = chunks.join("");
+      const chunkText = chunks.join("");
+      // DONE carries the whole answer; earlier events carry the next piece. Either way emit what is new,
+      // so a stream whose only answer event is the final one still yields text.
+      const next = mb.progress === "DONE" ? chunkText : fullAnswer + chunkText;
+      if (next.length > seenLen) {
+        const delta = next.slice(seenLen);
+        seenLen = next.length;
+        fullAnswer = next;
+        yield { delta, answer: fullAnswer, backendUuid: backendUuid ?? undefined };
       } else {
-        const chunkText = chunks.join("");
-        const cumulative = fullAnswer + chunkText;
-        if (cumulative.length > seenLen) {
-          const delta = cumulative.slice(seenLen);
-          fullAnswer = cumulative;
-          seenLen = cumulative.length;
-          yield { delta, answer: fullAnswer, backendUuid: backendUuid ?? undefined };
-        }
+        fullAnswer = next;
       }
     }
 

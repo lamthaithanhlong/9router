@@ -85,3 +85,43 @@ describe("perplexity-web pplx-auto request (offline)", () => {
     }
   });
 });
+
+// Real upstream shape measured 10-26 (lengths only): two "message" events; the second has final=true and one block
+// with intended_usage "ask_text" + markdown_block. The parser used to keep only "*markdown*" usages, so the answer was dropped.
+function pplxSse(answer) {
+  const first = { status: "PENDING", text_completed: false, final_sse_message: false, blocks: [] };
+  const second = {
+    status: "SUCCESS", final: true, text_completed: true, final_sse_message: true,
+    blocks: [{ intended_usage: "ask_text", markdown_block: { progress: "DONE", chunks: [answer] } }],
+  };
+  return `event: message\ndata: ${JSON.stringify(first)}\n\nevent: message\ndata: ${JSON.stringify(second)}\n\nevent: end_of_stream\ndata: {}\n\n`;
+}
+
+async function runWith(answer, stream) {
+  global.fetch = vi.fn(async () => new Response(pplxSse(answer), { status: 200, headers: { "Content-Type": "text/event-stream" } }));
+  const exec = new PerplexityWebExecutor();
+  const { response } = await exec.execute({
+    model: "pplx-auto",
+    body: { messages: [{ role: "user", content: "say OK" }] },
+    stream,
+    credentials: { apiKey: "TEST" },
+  });
+  return response;
+}
+
+describe("perplexity-web reads the ask_text answer block", () => {
+  it("non-stream: content is the ask_text markdown answer", async () => {
+    const res = await runWith("OK", false);
+    const json = await res.json();
+    expect(json.choices[0].message.content).toBe("OK");
+  });
+
+  it("stream: the final-only answer still arrives as a delta", async () => {
+    const res = await runWith("OK", true);
+    const text = await res.text();
+    const deltas = text.split("\n").filter((l) => l.startsWith("data:") && !l.includes("[DONE]"))
+      .map((l) => { try { return JSON.parse(l.slice(5)); } catch { return null; } })
+      .filter(Boolean).map((d) => d.choices?.[0]?.delta?.content || "").join("");
+    expect(deltas).toBe("OK");
+  });
+});
