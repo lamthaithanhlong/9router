@@ -3,6 +3,8 @@ import { PROVIDERS } from "../config/providers.js";
 import { SSE_DONE, SSE_HEADERS_NO_BUFFER } from "../utils/sseConstants.js";
 import { sseChunk } from "../utils/sse.js";
 import { appendFileSync } from "node:fs";
+import { prepareToolMessages } from "../translator/webTools.js";
+import { buildToolModeResponse } from "./chatgptWebTools.js";
 
 const PPLX_SSE_ENDPOINT = PROVIDERS["perplexity-web"].baseUrl;
 const PPLX_API_VERSION = "2.18";
@@ -169,6 +171,22 @@ function parseOpenAIMessages(messages) {
     else if (Array.isArray(msg.content)) {
       content = msg.content.filter((c) => c.type === "text").map((c) => String(c.text || "")).join(" ");
     }
+    // A tool round (assistant tool_calls, then role "tool" results) is the only
+    // evidence Perplexity gets that a tool already ran; dropping it makes the
+    // model re-issue the same call (same loop gemini-web hit).
+    if (role === "tool") {
+      const id = typeof msg.tool_call_id === "string" ? msg.tool_call_id : "";
+      if (content.trim()) history.push({ role: "user", content: id ? `Tool result [${id}]: ${content}` : `Tool result: ${content}` });
+      continue;
+    }
+    const calls = role === "assistant" && Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    const callLines = calls.map((call) => {
+      const name = typeof call.function?.name === "string" ? call.function.name : "tool";
+      const args = typeof call.function?.arguments === "string" ? call.function.arguments : "{}";
+      const id = typeof call.id === "string" ? ` [${call.id}]` : "";
+      return `Assistant requested tool${id}: ${name}(${args})`;
+    });
+    if (callLines.length) content = [content, ...callLines].filter((s) => s.trim()).join("\n");
     if (!content.trim()) continue;
     if (role === "system") systemMsg += content + "\n";
     else if (role === "user" || role === "assistant") history.push({ role, content });
@@ -180,16 +198,18 @@ function parseOpenAIMessages(messages) {
   return { systemMsg, history, currentMsg };
 }
 
-function buildPplxRequestBody(query, mode, modelPref, followUpUuid) {
+function buildPplxRequestBody(query, mode, modelPref, followUpUuid, toolMode = false) {
   const tz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
   return {
     query_str: query,
     params: {
       query_str: query,
-      search_focus: "internet",
+      // Tool mode: with web search on, Perplexity answers from search results
+      // and ignores the <tool> contract (measured 10-27, pplx-auto + pplx-sonnet).
+      search_focus: toolMode ? "writing" : "internet",
       mode,
       model_preference: modelPref,
-      sources: ["web"],
+      sources: toolMode ? [] : ["web"],
       attachments: [],
       frontend_uuid: crypto.randomUUID(),
       frontend_context_uuid: crypto.randomUUID(),
@@ -215,14 +235,18 @@ function formatToolsHint(tools) {
   return `Available tools (reference only, cannot invoke):\n${lines.join("\n")}`;
 }
 
-function buildQuery(parsed, followUpUuid, tools) {
+function buildQuery(parsed, followUpUuid, tools, toolMode = false) {
   if (followUpUuid) return parsed.currentMsg;
   const obj = {};
   const instr = [];
   if (parsed.systemMsg.trim()) instr.push(parsed.systemMsg.trim());
-  const toolsHint = formatToolsHint(tools);
+  // Tool mode: the <tool> contract is already in systemMsg (prepareToolMessages);
+  // the "reference only" hint and "answer directly" line would contradict it.
+  const toolsHint = toolMode ? "" : formatToolsHint(tools);
   if (toolsHint) instr.push(toolsHint);
-  instr.push("You have built-in web search. Answer questions directly using search results.");
+  instr.push(toolMode
+    ? "You have built-in web search, but when a requested tool fits the task, reply with the tool call exactly as the tool contract above says."
+    : "You have built-in web search. Answer questions directly using search results.");
   obj.instructions = instr;
   if (parsed.history.length > 0) obj.history = parsed.history;
   if (parsed.currentMsg) obj.query = parsed.currentMsg;
@@ -235,6 +259,7 @@ async function* extractContent(eventStream, signal) {
   let fullAnswer = "";
   let backendUuid = null;
   let seenLen = 0;
+  let answerUsage = null;
   const seenThinking = new Set();
 
   for await (const event of readPplxSseEvents(eventStream, signal)) {
@@ -289,6 +314,13 @@ async function* extractContent(eventStream, signal) {
       if (chunks.length === 0) continue;
 
       const chunkText = chunks.join("");
+      // Some models stream the same answer in BOTH an "ask_text" and a "markdown" block; appending both
+      // pieces to one buffer interleaved them ("I can't retrI can't retrieve…"). Follow the first answer
+      // block only; a DONE from any answer block is still the whole answer.
+      if (mb.progress !== "DONE") {
+        if (answerUsage === null) answerUsage = usage;
+        else if (usage !== answerUsage) continue;
+      }
       // DONE carries the whole answer; earlier events carry the next piece. Either way emit what is new,
       // so a stream whose only answer event is the final one still yields text.
       const next = mb.progress === "DONE" ? chunkText : fullAnswer + chunkText;
@@ -444,11 +476,16 @@ export class PerplexityWebExecutor extends BaseExecutor {
       log?.info?.("PPLX-WEB", `Unmapped model ${model}, using as raw preference`);
     }
 
-    const parsed = parseOpenAIMessages(messages);
-    const followUpUuid = sessionLookup(parsed.history);
+    // Tool-call emulation, same contract as chatgpt-web: <tool>{...}</tool> in,
+    // OpenAI tool_calls out.
+    const { hasTools, requestedTools, effectiveMessages } = prepareToolMessages(body || {}, messages);
+    const parsed = parseOpenAIMessages(effectiveMessages);
+    // A follow-up sends only the last user message, which would drop the tool
+    // contract and the tool results; tool mode always sends the full context.
+    const followUpUuid = hasTools ? null : sessionLookup(parsed.history);
     if (followUpUuid) log?.info?.("PPLX-WEB", `Session continue: ${followUpUuid.slice(0, 12)}...`);
 
-    const query = buildQuery(parsed, followUpUuid, body?.tools);
+    const query = buildQuery(parsed, followUpUuid, body?.tools, hasTools);
     if (!query.trim()) {
       const errResp = new Response(JSON.stringify({
         error: { message: "Empty query after processing", type: "invalid_request" },
@@ -456,7 +493,7 @@ export class PerplexityWebExecutor extends BaseExecutor {
       return { response: errResp, url: PPLX_SSE_ENDPOINT, headers: {}, transformedBody: body };
     }
 
-    const pplxBody = buildPplxRequestBody(query, pplxMode, modelPref, followUpUuid);
+    const pplxBody = buildPplxRequestBody(query, pplxMode, modelPref, followUpUuid, hasTools);
 
     const headers = {
       "Content-Type": "application/json",
@@ -513,7 +550,15 @@ export class PerplexityWebExecutor extends BaseExecutor {
     const created = Math.floor(Date.now() / 1000);
 
     let finalResponse;
-    if (stream) {
+    if (hasTools) {
+      const buffered = await buildNonStreamingResponse(response.body, model, cid, created, parsed.history, parsed.currentMsg, signal);
+      finalResponse = await buildToolModeResponse(buffered, requestedTools, Boolean(stream), {
+        cid,
+        created,
+        model,
+        idSeed: "pplx",
+      });
+    } else if (stream) {
       const sseStream = buildStreamingResponse(response.body, model, cid, created, parsed.history, parsed.currentMsg, signal);
       finalResponse = new Response(sseStream, {
         status: 200,

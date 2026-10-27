@@ -619,6 +619,20 @@ function parseDeepSeekErrorPayload(payload) {
   if (code !== undefined && code !== 0) {
     return { code, message: messageRaw || `DeepSeek error ${code}` };
   }
+  // A muted / blocked account answers HTTP 200 with code 0 and the real error in
+  // data.biz_code (e.g. 5 "user is muted"); passed through, the client got a
+  // completion with no choices and saw an empty answer.
+  const bizCode = payload.data?.biz_code;
+  if (typeof bizCode === "number" && bizCode !== 0) {
+    const muted = payload.data?.biz_data?.is_muted === 1;
+    const until = Number(payload.data?.biz_data?.mute_until);
+    const untilText = muted && Number.isFinite(until) ? ` until ${new Date(until * 1000).toISOString()}` : "";
+    return {
+      code: `biz_${bizCode}`,
+      message: `${typeof bizMsg === "string" && bizMsg ? bizMsg : `biz_code ${bizCode}`}${untilText}`,
+      muted,
+    };
+  }
   return null;
 }
 
@@ -960,7 +974,7 @@ export class DeepSeekWebExecutor extends BaseExecutor {
           if (parsed) {
             const errMsg = `DeepSeek error ${parsed.code}: ${parsed.message}`;
             log?.warn?.("DEEPSEEK-WEB", errMsg);
-            const status = parsed.code === 40003 ? 401 : parsed.code === 40002 ? 429 : 502;
+            const status = parsed.code === 40003 ? 401 : parsed.code === 40002 || parsed.muted ? 429 : 502;
             if (parsed.code === 40003) {
               tokenCache.delete(userToken);
             }
@@ -1119,4 +1133,4 @@ export class DeepSeekWebExecutor extends BaseExecutor {
 
 export const deepseekWebExecutor = new DeepSeekWebExecutor();
 
-export { acquireAccessToken, tokenCache, sessionCache };
+export { acquireAccessToken, tokenCache, sessionCache, parseDeepSeekErrorPayload };

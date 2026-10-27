@@ -261,8 +261,58 @@ describe("PerplexityWebExecutor.execute", () => {
       credentials: { apiKey: "c" },
     });
     const queryObj = JSON.parse(capturedBody.query_str);
-    const toolsHint = queryObj.instructions.find((s) => s.includes("Available tools"));
-    expect(toolsHint).toContain("- Shell: Execute commands");
+    const contract = queryObj.instructions.find((s) => s.includes("<tool>"));
+    expect(contract).toContain("- Shell: Execute commands");
+    expect(capturedBody.query_str).not.toContain("reference only, cannot invoke");
+  });
+
+  it("turns a <tool> block in the answer into OpenAI tool_calls", async () => {
+    global.fetch = vi.fn(async (url, opts) => {
+      const nonce = JSON.parse(opts.body).query_str.match(/\\"_nonce\\": \\"([^\\"]+)\\"/)[1];
+      const answer = `<tool>{"name": "get_weather", "arguments": {"city": "Hanoi"}, "_nonce": "${nonce}"}</tool>`;
+      return mockPplxStream([
+        {
+          blocks: [{ intended_usage: "markdown", markdown_block: { chunks: [answer], progress: "DONE" } }],
+          status: "COMPLETED",
+        },
+      ]);
+    });
+    const exec = new PerplexityWebExecutor();
+    const tools = [{ type: "function", function: { name: "get_weather", description: "weather", parameters: { type: "object" } } }];
+    const { response } = await exec.execute({
+      model: "pplx-auto",
+      body: { messages: [{ role: "user", content: "weather in Hanoi?" }], tools, stream: false },
+      stream: false,
+      credentials: { apiKey: "c" },
+    });
+    const j = await response.json();
+    expect(j.choices[0].finish_reason).toBe("tool_calls");
+    const call = j.choices[0].message.tool_calls[0];
+    expect(call.function.name).toBe("get_weather");
+    expect(JSON.parse(call.function.arguments)).toEqual({ city: "Hanoi" });
+  });
+
+  it("sends the tool round (call + result) in full instead of a follow-up", async () => {
+    const exec = new PerplexityWebExecutor();
+    const tools = [{ type: "function", function: { name: "run", description: "run a command" } }];
+    await exec.execute({
+      model: "pplx-auto",
+      body: {
+        messages: [
+          { role: "user", content: "count lines of README.md" },
+          { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "run", arguments: "{\"cmd\":\"wc -l README.md\"}" } }] },
+          { role: "tool", tool_call_id: "c1", content: "42 README.md" },
+        ],
+        tools,
+        stream: false,
+      },
+      stream: false,
+      credentials: { apiKey: "c" },
+    });
+    const all = capturedBody.query_str;
+    expect(all).toContain("Assistant requested tool [c1]: run");
+    expect(all).toContain("Tool result [c1]: 42 README.md");
+    expect(capturedBody.params.last_backend_uuid).toBeNull();
   });
 
   it("returns 400 on missing messages", async () => {
@@ -302,5 +352,25 @@ describe("PerplexityWebExecutor.execute", () => {
     expect(response.status).toBe(429);
     const j = await response.json();
     expect(j.error.message).toMatch(/rate limited/i);
+  });
+
+  it("does not interleave an answer streamed in both ask_text and markdown blocks", async () => {
+    const piece = (usage, text) => ({ intended_usage: usage, markdown_block: { chunks: [text], progress: "IN_PROGRESS" } });
+    global.fetch = vi.fn(async () =>
+      mockPplxStream([
+        { blocks: [piece("ask_text", "I can't retr"), piece("markdown", "I can't retr")] },
+        { blocks: [piece("ask_text", "ieve it."), piece("markdown", "ieve it.")] },
+        { status: "COMPLETED", blocks: [] },
+      ])
+    );
+    const exec = new PerplexityWebExecutor();
+    const { response } = await exec.execute({
+      model: "pplx-sonnet",
+      body: { messages: [{ role: "user", content: "hi" }], stream: false },
+      stream: false,
+      credentials: { apiKey: "c" },
+    });
+    const j = await response.json();
+    expect(j.choices[0].message.content).toBe("I can't retrieve it.");
   });
 });
