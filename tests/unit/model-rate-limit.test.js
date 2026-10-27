@@ -14,7 +14,14 @@ describe("modelRateLimit", () => {
     expect(rateRuleFor({}, "cx", "gpt-6-luna")).toBeNull();
     expect(rateRuleFor({ modelRateLimits: [{ match: "kimi", concurrency: 2, rpm: 10 }] }, "mvn", "kimi-k3")).toMatchObject({ concurrency: 2, rpm: 10 });
     expect(rateRuleFor({ modelRateLimits: [] }, "x", "deepseek-v4-flash")).toBeNull();
-    expect(DEFAULT_RATE_LIMITS[0].match).toBe("deepseek");
+    expect(DEFAULT_RATE_LIMITS.map((r) => r.match)).toEqual(["deepseek-web", "deepseek"]);
+  });
+
+  it("paces the deepseek-web account at one request at a time, one a minute", () => {
+    expect(rateRuleFor({}, "deepseek-web", "deepseek-v4-pro-think")).toMatchObject({ match: "deepseek-web", concurrency: 1, rpm: 1 });
+    expect(rateRuleFor({}, "DeepSeek-Web", "deepseek-v4-flash")).toMatchObject({ match: "deepseek-web", concurrency: 1, rpm: 1 });
+    // the API/distributor deepseek models keep the wider pace
+    expect(rateRuleFor({}, "openai-compatible-chat-8ec45c8c", "deepseek-v4-flash")).toMatchObject({ match: "deepseek", rpm: 30 });
   });
 
   it("never runs more than `concurrency` at once, and starts them 60000/rpm ms apart, in arrival order", async () => {

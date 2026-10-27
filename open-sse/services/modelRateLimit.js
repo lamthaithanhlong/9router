@@ -13,7 +13,13 @@
 // The slot is held until the upstream call returns (for a streamed answer: until its headers; DeepSeek workers do not stream).
 // settings.modelRateLimits (an array of rules) replaces the defaults; an empty array turns the pace off.
 
-export const DEFAULT_RATE_LIMITS = [{ match: "deepseek", concurrency: 4, rpm: 30, maxWaitMs: 180000 }];
+// The first matching rule wins, so the narrower deepseek-web rule comes first. deepseek-web is one free chat account:
+// a harness job sent it 43 requests in 13 min (~2.5M prompt tokens, 2026-10-26 02:22 UTC) and about an hour later the
+// account was muted for 72 h (biz_code 5). Owner 10-27: one request at a time, one a minute.
+export const DEFAULT_RATE_LIMITS = [
+  { match: "deepseek-web", concurrency: 1, rpm: 1, maxWaitMs: 300000 },
+  { match: "deepseek", concurrency: 4, rpm: 30, maxWaitMs: 180000 },
+];
 
 const states = new Map();
 
