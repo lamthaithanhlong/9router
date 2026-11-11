@@ -20,6 +20,7 @@ import CompatibleModelsSection from "./CompatibleModelsSection";
 import ConnectionRow from "./ConnectionRow";
 import AddApiKeyModal from "./AddApiKeyModal";
 import EditCompatibleNodeModal from "./EditCompatibleNodeModal";
+import ModalControl from "./ModalControl";
 import AddCustomModelModal from "./AddCustomModelModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
 import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
@@ -1469,6 +1470,7 @@ export default function ProviderDetailPage() {
               </p>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+              {/\.modal\.run(\/|$)/.test(providerNode.baseUrl || "") && <ModalControl nodeId={providerNode.id} />}
               <Button
                 size="sm"
                 icon="add"
