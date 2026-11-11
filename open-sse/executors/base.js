@@ -144,7 +144,11 @@ export class BaseExecutor {
 
       // Abort if upstream doesn't return response headers within connection timeout
       const connectCtrl = new AbortController();
-      const timeoutMs = this.config?.timeoutMs || FETCH_CONNECT_TIMEOUT_MS;
+      // A node may set its own wait (providerSpecificData.connectTimeoutMs), e.g. a scale-to-zero GPU
+      // endpoint whose cold start is minutes: a 60 s abort + retry there re-POSTs, and the upstream
+      // queues every copy (Modal kept one pending input per retry, 2026-11-11).
+      const nodeTimeoutMs = Number(credentials?.providerSpecificData?.connectTimeoutMs) || 0;
+      const timeoutMs = nodeTimeoutMs || this.config?.timeoutMs || FETCH_CONNECT_TIMEOUT_MS;
       const connectTimer = setTimeout(() => connectCtrl.abort(new Error("fetch connect timeout")), timeoutMs);
       const mergedSignal = signal ? AbortSignal.any([signal, connectCtrl.signal]) : connectCtrl.signal;
 
@@ -182,6 +186,9 @@ export class BaseExecutor {
         dbg("FETCH", `${this.provider.toUpperCase()} ✖ ${error.name}: ${error.message}${isConnectTimeout ? " (connect timeout)" : ""}`);
         // Connect timeout is internal — convert to retryable network error, don't propagate AbortError
         if (error.name === "AbortError" && !isConnectTimeout) throw error;
+
+        // A node with its own long wait does not re-send after it: the first request may still be queued upstream.
+        if (isConnectTimeout && nodeTimeoutMs) throw error;
 
         // Map network/fetch exceptions to 502 retry config
         if (await tryRetry(urlIndex, HTTP_STATUS.BAD_GATEWAY, `network "${error.message}"`)) { urlIndex--; continue; }

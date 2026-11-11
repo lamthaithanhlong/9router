@@ -21,7 +21,7 @@ function makeExec(config) {
 
 const creds = { apiKey: "k" };
 
-beforeEach(() => fetchMock.mockReset());
+beforeEach(() => { fetchMock.mockReset(); }); // braces: a returned mock would be called as a teardown
 
 describe("BaseExecutor.execute — retry by status (config-driven)", () => {
   it("retries 502 `attempts` times then succeeds", async () => {
@@ -103,5 +103,28 @@ describe("BaseExecutor.execute — computeRetryDelay hook veto", () => {
     // hook vetoes retry → no fallback url → returns the 429 response as-is
     expect(out.response.status).toBe(429);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("BaseExecutor.execute — node connectTimeoutMs (scale-to-zero upstream)", () => {
+  // fetch that never answers until aborted, like a GPU endpoint still cold-starting
+  const hang = (_url, opts) => new Promise((_, reject) => {
+    const signal = opts.signal;
+    signal.addEventListener("abort", () => { const e = new Error("aborted"); e.name = "AbortError"; reject(e); });
+  });
+
+  it("waits the node's own time and does not re-send after it", async () => {
+    const ex = makeExec({ baseUrl: "https://x/api", retry: { 502: { attempts: 3, delayMs: 0 } } });
+    fetchMock.mockImplementation(hang);
+    const c = { apiKey: "k", providerSpecificData: { connectTimeoutMs: 50 } };
+    await expect(ex.execute({ model: "m", body: {}, stream: false, credentials: c })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1); // one POST upstream, not 1 + 3 retries
+  });
+
+  it("a node without it keeps the 502 retry on connect timeout", async () => {
+    const ex = makeExec({ baseUrl: "https://x/api", timeoutMs: 50, retry: { 502: { attempts: 2, delayMs: 0 } } });
+    fetchMock.mockImplementation(hang);
+    await expect(ex.execute({ model: "m", body: {}, stream: false, credentials: creds })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
