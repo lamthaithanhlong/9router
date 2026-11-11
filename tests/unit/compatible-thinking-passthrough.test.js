@@ -17,3 +17,11 @@ describe("applyThinking on a compatible node", () => {
     expect(body.reasoning_effort).toBeUndefined();
   });
 });
+
+describe("applyThinking suffix on a compatible node", () => {
+  it("a model(none) suffix turns thinking off even though the client sent nothing", () => {
+    const body = { model: "gemma4-12b-story-32k-ub2k", messages: [] };
+    applyThinking("openai", "gemma4-12b-story-32k-ub2k(none)", body, "openai-compatible-chat-modal123");
+    expect(body.reasoning_effort).toBe("none");
+  });
+});
