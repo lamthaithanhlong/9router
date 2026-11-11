@@ -208,3 +208,28 @@ describe("compatible node extra headers — API round trip", () => {
     expect((await getProviderNodeById(node.id)).extraHeaders).toBeUndefined();
   });
 });
+
+// The executor that actually serves a compatible node is the DefaultExecutor
+// (getExecutor falls back to it). It overrides buildHeaders without calling
+// super, so the BaseExecutor tests above never saw that it dropped the headers:
+// a Modal proxy-auth node got 401 "missing credentials for proxy authorization".
+describe("getExecutor(compatible node).buildHeaders — extra headers merge", () => {
+  it("sends the declared headers through the executor used at request time", async () => {
+    const { getExecutor } = await import("../../open-sse/executors/index.js");
+    const headers = getExecutor("openai-compatible-chat-modal123").buildHeaders(
+      { apiKey: "k", providerSpecificData: { extraHeaders: { "Modal-Key": "a", "Modal-Secret": "b" } } },
+      false,
+    );
+    expect(headers["Modal-Key"]).toBe("a");
+    expect(headers["Modal-Secret"]).toBe("b");
+  });
+
+  it("keeps them off a built-in provider", async () => {
+    const { getExecutor } = await import("../../open-sse/executors/index.js");
+    const headers = getExecutor("openrouter").buildHeaders(
+      { apiKey: "k", providerSpecificData: { extraHeaders: { "Modal-Key": "a" } } },
+      false,
+    );
+    expect(headers["Modal-Key"]).toBeUndefined();
+  });
+});

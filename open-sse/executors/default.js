@@ -1,4 +1,5 @@
 import { BaseExecutor } from "./base.js";
+import { resolveExtraHeaders } from "../../src/shared/utils/extraHeaders.js";
 import { randomUUID } from "node:crypto";
 import { PROVIDERS, PROVIDER_OAUTH } from "../config/providers.js";
 import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE, selectAnthropicBeta, mergeAnthropicBeta } from "../providers/shared.js";
@@ -251,6 +252,13 @@ export class DefaultExecutor extends BaseExecutor {
     }
 
     if (stream) headers["Accept"] = "text/event-stream";
+
+    // User-declared headers on compatible nodes (gateway token, tenant id, …).
+    // BaseExecutor merges these too, but this override never called super, so
+    // every openai-/anthropic-compatible request silently dropped them.
+    if (this.provider?.startsWith?.("openai-compatible-") || this.provider?.startsWith?.("anthropic-compatible-")) {
+      Object.assign(headers, resolveExtraHeaders(credentials?.providerSpecificData?.extraHeaders));
+    }
     return headers;
   }
 
