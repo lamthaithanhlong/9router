@@ -439,6 +439,14 @@ export function applyThinking(targetFormat, model, body, provider = null, intent
   const cfg = override || intent || extractThinking(body);
   const caps = getCapabilitiesForModel(provider, cleanModel);
 
+  // A user-declared compatible node serves models the capability table has never
+  // seen (a self-hosted gemma behind Ollama), so "cannot reason" there only means
+  // "unknown". Stripping would drop the client's own reasoning_effort:"none" and
+  // leave a thinking model spending the whole max_tokens on reasoning. Pass the
+  // client's fields through untouched; the endpoint owner knows what it accepts.
+  if (!caps.reasoning && /^(openai|anthropic)-compatible-/.test(provider || "")) {
+    return body;
+  }
   // Model cannot reason → strip any stray thinking fields.
   if (!caps.reasoning) {
     stripAll(body);
