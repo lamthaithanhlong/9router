@@ -10,5 +10,9 @@ export async function register() {
 
     const { startModelCatalogSync } = await import("@/lib/modelCatalog/sync.js");
     startModelCatalogSync();
+
+    // Modal nodes: phone notification when a container starts or stops (no-op without modal-notify.json).
+    const { startModalWatcher } = await import("@/lib/modalControl");
+    startModalWatcher();
   }
 }

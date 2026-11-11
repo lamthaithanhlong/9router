@@ -9,10 +9,12 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
 import { resolveExtraHeaders } from "@/shared/utils/extraHeaders";
 
 const RUN_TIMEOUT_MS = 10 * 60 * 1000;
-const runs = new Map(); // nodeId -> { state: "starting"|"ready"|"failed", startedAt, finishedAt, ms, error }
+// On globalThis: Next bundles the API route and instrumentation separately, and both must see the same runs.
+const runs = (globalThis.__modalRuns ||= new Map()); // nodeId -> { state: "starting"|"ready"|"failed", startedAt, finishedAt, ms, error }
 
 export function modalLabel(baseUrl) {
   try {
@@ -101,6 +103,84 @@ export function startModalRun(node) {
       Object.assign(run, { state: "ready" });
     })
     .catch((e) => Object.assign(run, { state: "failed", error: e.message }))
-    .finally(() => Object.assign(run, { finishedAt: Date.now(), ms: Date.now() - run.startedAt }));
+    .finally(() => {
+      Object.assign(run, { finishedAt: Date.now(), ms: Date.now() - run.startedAt });
+      const secs = Math.round(run.ms / 1000);
+      notify(run.state === "ready" ? `${node.name}: ready` : `${node.name}: run failed`,
+        run.state === "ready" ? `Container up after ${secs}s. Stops by itself after 20 min without requests.` : run.error,
+        run.state === "ready" ? "white_check_mark" : "x");
+    });
   return run;
+}
+
+// ---- Phone notifications (ntfy) --------------------------------------------------------------------
+// $DATA_DIR/modal-notify.json = {"url": "https://ntfy.sh/<topic>"}; no file = no notifications.
+const DATA_DIR = process.env.DATA_DIR || path.join(os.homedir(), ".9router");
+const NOTIFY_FILE = path.join(DATA_DIR, "modal-notify.json");
+
+export async function notify(title, message, tag) {
+  let url;
+  try {
+    url = JSON.parse(fs.readFileSync(NOTIFY_FILE, "utf8")).url;
+  } catch {
+    return false;
+  }
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const topic = u.pathname.replace(/^\/+|\/+$/g, "");
+    // JSON publish keeps a UTF-8 title intact (HTTP header values must be ASCII).
+    const res = await fetch(u.origin, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic, title, message: message || "", tags: tag ? [tag] : [] }),
+      signal: AbortSignal.timeout(15000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// started | stopped | null, from the last seen state and the containers listed now.
+export function transition(prev, containers) {
+  const running = containers.length > 0;
+  if (!prev) return null; // first look after boot: remember, do not announce
+  if (!prev.running && running) return "started";
+  if (prev.running && !running) return "stopped";
+  return null;
+}
+
+const seen = (globalThis.__modalSeen ||= new Map()); // nodeId -> { running, since }
+
+async function watchOnce() {
+  const { getProviderNodes } = await import("@/models");
+  const nodes = (await getProviderNodes()).filter(isModalNode);
+  if (!nodes.length) return;
+  const all = await listContainers();
+  for (const node of nodes) {
+    const cs = containersForLabel(modalLabel(node.baseUrl), all);
+    const prev = seen.get(node.id);
+    const t = transition(prev, cs);
+    const since = cs.length ? Math.min(...cs.map((c) => Date.parse(c.start_time) || Date.now())) : null;
+    seen.set(node.id, { running: cs.length > 0, since: since ?? prev?.since });
+    if (t === "started") {
+      const run = runs.get(node.id);
+      // the Run button announces its own "ready"; this covers a container woken by a chat request
+      if (!(run && Date.now() - run.startedAt < 3 * 60 * 1000)) {
+        await notify(`${node.name}: running`, "A container started (woken by a request).", "arrow_forward");
+      }
+    } else if (t === "stopped") {
+      const mins = prev?.since ? Math.round((Date.now() - prev.since) / 60000) : null;
+      await notify(`${node.name}: stopped`, mins ? `Container stopped after about ${mins} min.` : "Container stopped.", "stop_button");
+    }
+  }
+}
+
+export function startModalWatcher(intervalMs = 60000) {
+  if (globalThis.__modalWatcher) return;
+  const tick = () => watchOnce().catch(() => {});
+  tick();
+  globalThis.__modalWatcher = setInterval(tick, intervalMs);
+  globalThis.__modalWatcher.unref?.();
 }

@@ -30,3 +30,17 @@ describe("modalControl", () => {
     expect(deriveState([], { state: "ready", finishedAt: start })).toBe("stopped");
   });
 });
+
+import { transition } from "@/lib/modalControl";
+
+describe("modal start/stop transitions", () => {
+  const up = [{ app_name: "a", start_time: "2026-11-11 15:05:57-05:00" }];
+  it("announces only real changes, never the first look after boot", () => {
+    expect(transition(undefined, up)).toBeNull();
+    expect(transition(undefined, [])).toBeNull();
+    expect(transition({ running: false }, up)).toBe("started");
+    expect(transition({ running: true }, [])).toBe("stopped");
+    expect(transition({ running: true }, up)).toBeNull();
+    expect(transition({ running: false }, [])).toBeNull();
+  });
+});
